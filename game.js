@@ -1254,8 +1254,8 @@ function render() {
     // Render Virtual Analog Semi-Transparan (Khusus Mobile saat bermain)
     if (isMobileDevice && (gameState === 'WAVE_MINIONS' || gameState === 'BOSS_WARNING' || gameState === 'BOSS_FIGHT')) {
         ctx.save();
-        // Jika belum disentuh, tampilkan posisi panduan samar di kiri bawah
-        const baseX = joystick.active ? joystick.baseX : 95;
+        // Jika belum disentuh, tampilkan posisi panduan samar di kanan bawah
+        const baseX = joystick.active ? joystick.baseX : canvas.width - 95;
         const baseY = joystick.active ? joystick.baseY : canvas.height - 105;
         const knobX = joystick.active ? joystick.knobX : baseX;
         const knobY = joystick.active ? joystick.knobY : baseY;
