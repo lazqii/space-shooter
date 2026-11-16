@@ -218,7 +218,19 @@ function applySkillChoice(choice) {
 // 4. KONTROL INPUT
 // ==========================================
 const keys = {};
-let isPointerDown = false;
+const isMobileDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+const joystick = {
+    active: false,
+    touchId: null,
+    baseX: 0,
+    baseY: 0,
+    knobX: 0,
+    knobY: 0,
+    maxRadius: 52, // Jarak maksimal tarikan analog
+    dx: 0,         // Nilai arah horizontal (-1 s/d 1)
+    dy: 0          // Nilai arah vertikal (-1 s/d 1)
+};
 
 window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
@@ -233,16 +245,19 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
-function handleCanvasClick(clientX, clientY) {
+function getCanvasCoords(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
-    const x = (clientX - rect.left) * (canvas.width / rect.width);
-    const y = (clientY - rect.top) * (canvas.height / rect.height);
+    return {
+        x: (clientX - rect.left) * (canvas.width / rect.width),
+        y: (clientY - rect.top) * (canvas.height / rect.height)
+    };
+}
 
+function handleMenuTap(x, y) {
     if (gameState === 'START' || gameState === 'GAME_OVER') {
         startGame();
-        return;
+        return true;
     }
-
     if (gameState === 'SKILL_SELECT') {
         skillChoices.forEach((choice, idx) => {
             const cardY = 230 + idx * 125;
@@ -250,37 +265,108 @@ function handleCanvasClick(clientX, clientY) {
                 applySkillChoice(choice);
             }
         });
-        return;
+        return true;
     }
-
-    isPointerDown = true;
-    player.x = Math.max(32, Math.min(canvas.width - 32, x));
-    player.y = Math.max(68, Math.min(canvas.height - 32, y));
+    return false;
 }
 
-canvas.addEventListener('mousedown', (e) => handleCanvasClick(e.clientX, e.clientY));
-window.addEventListener('mousemove', (e) => {
-    if (isPointerDown && gameState !== 'START' && gameState !== 'GAME_OVER' && gameState !== 'SKILL_SELECT') {
-        const rect = canvas.getBoundingClientRect();
-        player.x = Math.max(32, Math.min(canvas.width - 32, (e.clientX - rect.left) * (canvas.width / rect.width)));
-        player.y = Math.max(68, Math.min(canvas.height - 32, (e.clientY - rect.top) * (canvas.height / rect.height)));
+// Kontrol Mouse (Untuk testing klik di PC)
+canvas.addEventListener('mousedown', (e) => {
+    const pos = getCanvasCoords(e.clientX, e.clientY);
+    if (handleMenuTap(pos.x, pos.y)) return;
+
+    if (isMobileDevice) {
+        joystick.active = true;
+        joystick.baseX = pos.x;
+        joystick.baseY = pos.y;
+        joystick.knobX = pos.x;
+        joystick.knobY = pos.y;
+        joystick.dx = 0;
+        joystick.dy = 0;
     }
 });
-window.addEventListener('mouseup', () => { isPointerDown = false; });
+
+window.addEventListener('mousemove', (e) => {
+    if (joystick.active && joystick.touchId === null) {
+        const pos = getCanvasCoords(e.clientX, e.clientY);
+        updateJoystickMove(pos.x, pos.y);
+    }
+});
+
+window.addEventListener('mouseup', () => {
+    if (joystick.touchId === null) resetJoystick();
+});
+
+// Kontrol Sentuh Mobile (Floating Virtual Analog)
+function updateJoystickMove(x, y) {
+    const diffX = x - joystick.baseX;
+    const diffY = y - joystick.baseY;
+    const dist = Math.hypot(diffX, diffY);
+
+    if (dist > joystick.maxRadius) {
+        const angle = Math.atan2(diffY, diffX);
+        joystick.knobX = joystick.baseX + Math.cos(angle) * joystick.maxRadius;
+        joystick.knobY = joystick.baseY + Math.sin(angle) * joystick.maxRadius;
+    } else {
+        joystick.knobX = x;
+        joystick.knobY = y;
+    }
+
+    // Normalisasi kecepatan (-1 sampai 1) dengan deadzone kecil agar stabil
+    joystick.dx = dist > 6 ? (joystick.knobX - joystick.baseX) / joystick.maxRadius : 0;
+    joystick.dy = dist > 6 ? (joystick.knobY - joystick.baseY) / joystick.maxRadius : 0;
+}
+
+function resetJoystick() {
+    joystick.active = false;
+    joystick.touchId = null;
+    joystick.dx = 0;
+    joystick.dy = 0;
+}
 
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    handleCanvasClick(e.touches[0].clientX, e.touches[0].clientY);
-}, { passive: false });
-canvas.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    if (isPointerDown && gameState !== 'SKILL_SELECT') {
-        const rect = canvas.getBoundingClientRect();
-        player.x = Math.max(32, Math.min(canvas.width - 32, (e.touches[0].clientX - rect.left) * (canvas.width / rect.width)));
-        player.y = Math.max(68, Math.min(canvas.height - 32, (e.touches[0].clientY - rect.top) * (canvas.height / rect.height)));
+    const touch = e.changedTouches[0];
+    const pos = getCanvasCoords(touch.clientX, touch.clientY);
+
+    if (handleMenuTap(pos.x, pos.y)) return;
+
+    if (!joystick.active) {
+        joystick.active = true;
+        joystick.touchId = touch.identifier;
+        joystick.baseX = pos.x;
+        joystick.baseY = pos.y;
+        joystick.knobX = pos.x;
+        joystick.knobY = pos.y;
+        joystick.dx = 0;
+        joystick.dy = 0;
     }
 }, { passive: false });
-canvas.addEventListener('touchend', () => { isPointerDown = false; });
+
+canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (!joystick.active) return;
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touch.identifier === joystick.touchId) {
+            const pos = getCanvasCoords(touch.clientX, touch.clientY);
+            updateJoystickMove(pos.x, pos.y);
+            break;
+        }
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joystick.touchId) {
+            resetJoystick();
+            break;
+        }
+    }
+});
+
+canvas.addEventListener('touchcancel', resetJoystick);
 
 // ==========================================
 // 5. SETUP WAVE & LOGIKA PENEMBAKAN 4 SENJATA
@@ -736,11 +822,17 @@ function update() {
 
     if (gameState === 'START' || gameState === 'GAME_OVER' || gameState === 'SKILL_SELECT') return;
 
-    const pSpeed = GAME_CONFIG.player.speed;
+    // Gerak Keyboard (PC)
     if (keys['ArrowLeft'] || keys['KeyA']) player.x -= pSpeed;
     if (keys['ArrowRight'] || keys['KeyD']) player.x += pSpeed;
     if (keys['ArrowUp'] || keys['KeyW']) player.y -= pSpeed;
     if (keys['ArrowDown'] || keys['KeyS']) player.y += pSpeed;
+
+    // Gerak Virtual Analog (Mobile)
+    if (joystick.active) {
+        player.x += joystick.dx * pSpeed;
+        player.y += joystick.dy * pSpeed;
+    }
 
     player.x = Math.max(32, Math.min(canvas.width - 32, player.x));
     player.y = Math.max(68, Math.min(canvas.height - 32, player.y));
@@ -1029,6 +1121,35 @@ function render() {
     for (const s of stars) {
         ctx.fillStyle = `rgba(226, 232, 240, ${s.alpha})`;
         ctx.fillRect(s.x, s.y, s.size, s.size);
+    }
+
+    // Render Virtual Analog Semi-Transparan (Khusus Mobile saat bermain)
+    if (isMobileDevice && (gameState === 'WAVE_MINIONS' || gameState === 'BOSS_WARNING' || gameState === 'BOSS_FIGHT')) {
+        ctx.save();
+        // Jika belum disentuh, tampilkan posisi panduan samar di kiri bawah
+        const baseX = joystick.active ? joystick.baseX : 95;
+        const baseY = joystick.active ? joystick.baseY : canvas.height - 105;
+        const knobX = joystick.active ? joystick.knobX : baseX;
+        const knobY = joystick.active ? joystick.knobY : baseY;
+
+        // Lingkaran Luar Analog (Sangat transparan)
+        ctx.beginPath();
+        ctx.arc(baseX, baseY, joystick.maxRadius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.28)';
+        ctx.stroke();
+
+        // Lingkaran Dalam / Thumb Knob (Agak transparan)
+        ctx.beginPath();
+        ctx.arc(knobX, knobY, 22, 0, Math.PI * 2);
+        ctx.fillStyle = joystick.active ? 'rgba(56, 189, 248, 0.45)' : 'rgba(148, 163, 184, 0.25)';
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.stroke();
+        ctx.restore();
     }
 
     // Drops (+HP)
