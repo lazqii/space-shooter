@@ -1301,10 +1301,26 @@ function render() {
     ctx.restore();
 }
 
-function gameLoop() {
-    update();
+let lastTimestamp = 0;
+let frameAccumulator = 0;
+const FIXED_TIMESTEP = 1000 / 60; // Kunci kecepatan logika di 60 FPS (16.67 ms per frame)
+
+function gameLoop(timestamp) {
+    if (!lastTimestamp) lastTimestamp = timestamp;
+
+    // Batasi maksimal selisih waktu (misal 100ms) agar game tidak loncat saat pindah tab
+    const deltaTime = Math.min(100, timestamp - lastTimestamp);
+    lastTimestamp = timestamp;
+    frameAccumulator += deltaTime;
+
+    // Jalankan update() tepat 60 kali per detik berapapun Hz layar HP-nya
+    while (frameAccumulator >= FIXED_TIMESTEP) {
+        update();
+        frameAccumulator -= FIXED_TIMESTEP;
+    }
+
     render();
     requestAnimationFrame(gameLoop);
 }
 
-gameLoop();
+requestAnimationFrame(gameLoop);
