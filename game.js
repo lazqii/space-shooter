@@ -227,25 +227,12 @@ const joystick = {
     baseY: 0,
     knobX: 0,
     knobY: 0,
-    maxRadius: 52, // Jarak maksimal tarikan analog
-    dx: 0,         // Nilai arah horizontal (-1 s/d 1)
-    dy: 0          // Nilai arah vertikal (-1 s/d 1)
+    maxRadius: 52,
+    dx: 0,
+    dy: 0
 };
 
-window.addEventListener('keydown', (e) => {
-    keys[e.code] = true;
-    if ((e.code === 'Space' || e.code === 'Enter') && (gameState === 'START' || gameState === 'GAME_OVER')) {
-        startGame();
-    }
-    if (gameState === 'SKILL_SELECT') {
-        if (e.code === 'Digit1' && skillChoices[0]) applySkillChoice(skillChoices[0]);
-        if (e.code === 'Digit2' && skillChoices[1]) applySkillChoice(skillChoices[1]);
-        if (e.code === 'Digit3' && skillChoices[2]) applySkillChoice(skillChoices[2]);
-    }
-});
-window.addEventListener('keyup', (e) => { keys[e.code] = false; });
-
-function getCanvasCoords(clientX, clientY) {
+function toCanvasXY(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     return {
         x: (clientX - rect.left) * (canvas.width / rect.width),
@@ -253,52 +240,25 @@ function getCanvasCoords(clientX, clientY) {
     };
 }
 
-function handleMenuTap(x, y) {
+function handleMenuAction(x, y) {
     if (gameState === 'START' || gameState === 'GAME_OVER') {
         startGame();
         return true;
     }
     if (gameState === 'SKILL_SELECT') {
-        skillChoices.forEach((choice, idx) => {
+        for (let idx = 0; idx < skillChoices.length; idx++) {
             const cardY = 230 + idx * 125;
             if (x >= 40 && x <= canvas.width - 40 && y >= cardY && y <= cardY + 105) {
-                applySkillChoice(choice);
+                applySkillChoice(skillChoices[idx]);
+                break;
             }
-        });
+        }
         return true;
     }
     return false;
 }
 
-// Kontrol Mouse (Untuk testing klik di PC)
-canvas.addEventListener('mousedown', (e) => {
-    const pos = getCanvasCoords(e.clientX, e.clientY);
-    if (handleMenuTap(pos.x, pos.y)) return;
-
-    if (isMobileDevice) {
-        joystick.active = true;
-        joystick.baseX = pos.x;
-        joystick.baseY = pos.y;
-        joystick.knobX = pos.x;
-        joystick.knobY = pos.y;
-        joystick.dx = 0;
-        joystick.dy = 0;
-    }
-});
-
-window.addEventListener('mousemove', (e) => {
-    if (joystick.active && joystick.touchId === null) {
-        const pos = getCanvasCoords(e.clientX, e.clientY);
-        updateJoystickMove(pos.x, pos.y);
-    }
-});
-
-window.addEventListener('mouseup', () => {
-    if (joystick.touchId === null) resetJoystick();
-});
-
-// Kontrol Sentuh Mobile (Floating Virtual Analog)
-function updateJoystickMove(x, y) {
+function updateAnalogDrag(x, y) {
     const diffX = x - joystick.baseX;
     const diffY = y - joystick.baseY;
     const dist = Math.hypot(diffX, diffY);
@@ -312,7 +272,6 @@ function updateJoystickMove(x, y) {
         joystick.knobY = y;
     }
 
-    // Normalisasi kecepatan (-1 sampai 1) dengan deadzone kecil agar stabil
     joystick.dx = dist > 6 ? (joystick.knobX - joystick.baseX) / joystick.maxRadius : 0;
     joystick.dy = dist > 6 ? (joystick.knobY - joystick.baseY) / joystick.maxRadius : 0;
 }
@@ -324,12 +283,54 @@ function resetJoystick() {
     joystick.dy = 0;
 }
 
-canvas.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    const touch = e.changedTouches[0];
-    const pos = getCanvasCoords(touch.clientX, touch.clientY);
+// Keyboard (PC)
+window.addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+    if ((e.code === 'Space' || e.code === 'Enter') && (gameState === 'START' || gameState === 'GAME_OVER')) {
+        startGame();
+    }
+    if (gameState === 'SKILL_SELECT') {
+        if (e.code === 'Digit1' && skillChoices[0]) applySkillChoice(skillChoices[0]);
+        if (e.code === 'Digit2' && skillChoices[1]) applySkillChoice(skillChoices[1]);
+        if (e.code === 'Digit3' && skillChoices[2]) applySkillChoice(skillChoices[2]);
+    }
+});
+window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
-    if (handleMenuTap(pos.x, pos.y)) return;
+// Mouse (PC)
+canvas.addEventListener('mousedown', (e) => {
+    const pos = toCanvasXY(e.clientX, e.clientY);
+    if (handleMenuAction(pos.x, pos.y)) return;
+
+    joystick.active = true;
+    joystick.touchId = 'mouse';
+    joystick.baseX = pos.x;
+    joystick.baseY = pos.y;
+    joystick.knobX = pos.x;
+    joystick.knobY = pos.y;
+    joystick.dx = 0;
+    joystick.dy = 0;
+});
+
+window.addEventListener('mousemove', (e) => {
+    if (joystick.active && joystick.touchId === 'mouse') {
+        const pos = toCanvasXY(e.clientX, e.clientY);
+        updateAnalogDrag(pos.x, pos.y);
+    }
+});
+
+window.addEventListener('mouseup', () => {
+    if (joystick.touchId === 'mouse') resetJoystick();
+});
+
+// Touch (HP / Mobile)
+canvas.addEventListener('touchstart', (e) => {
+    if (e.cancelable) e.preventDefault();
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+
+    const pos = toCanvasXY(touch.clientX, touch.clientY);
+    if (handleMenuAction(pos.x, pos.y)) return;
 
     if (!joystick.active) {
         joystick.active = true;
@@ -344,14 +345,14 @@ canvas.addEventListener('touchstart', (e) => {
 }, { passive: false });
 
 canvas.addEventListener('touchmove', (e) => {
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     if (!joystick.active) return;
 
     for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
         if (touch.identifier === joystick.touchId) {
-            const pos = getCanvasCoords(touch.clientX, touch.clientY);
-            updateJoystickMove(pos.x, pos.y);
+            const pos = toCanvasXY(touch.clientX, touch.clientY);
+            updateAnalogDrag(pos.x, pos.y);
             break;
         }
     }
@@ -407,6 +408,7 @@ function startGame() {
     particles = [];
     floatingTexts = [];
 
+    resetJoystick();
     setupWave(1);
 }
 
