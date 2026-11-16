@@ -67,11 +67,14 @@ let lightningState = {
 
 let skillChoices = [];
 
+const pSpeed = GAME_CONFIG.player.speed;
+
 const player = {
     x: canvas.width / 2,
     y: canvas.height - 100,
     width: GAME_CONFIG.player.width,
     height: GAME_CONFIG.player.height,
+    speed: pSpeed,
     hp: GAME_CONFIG.player.maxHp,
     hasShield: false, // Shield dari Arctic Bullet cabang B
     invulnTimer: 0
@@ -358,7 +361,7 @@ canvas.addEventListener('touchmove', (e) => {
     }
 }, { passive: false });
 
-canvas.addEventListener('touchend', (e) => {
+window.addEventListener('touchend', (e) => {
     for (let i = 0; i < e.changedTouches.length; i++) {
         if (e.changedTouches[i].identifier === joystick.touchId) {
             resetJoystick();
@@ -367,7 +370,7 @@ canvas.addEventListener('touchend', (e) => {
     }
 });
 
-canvas.addEventListener('touchcancel', resetJoystick);
+window.addEventListener('touchcancel', resetJoystick);
 
 // ==========================================
 // 5. SETUP WAVE & LOGIKA PENEMBAKAN 4 SENJATA
@@ -1436,13 +1439,18 @@ function gameLoop(timestamp) {
     lastTimestamp = timestamp;
     frameAccumulator += deltaTime;
 
-    // Jalankan update() tepat 60 kali per detik berapapun Hz layar HP-nya
-    while (frameAccumulator >= FIXED_TIMESTEP) {
-        update();
-        frameAccumulator -= FIXED_TIMESTEP;
+    try {
+        // Jalankan update() tepat 60 kali per detik berapapun Hz layar HP-nya
+        while (frameAccumulator >= FIXED_TIMESTEP) {
+            update();
+            frameAccumulator -= FIXED_TIMESTEP;
+        }
+
+        render();
+    } catch (err) {
+        console.error('Game loop error:', err);
     }
 
-    render();
     requestAnimationFrame(gameLoop);
 }
 
