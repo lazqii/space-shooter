@@ -1123,35 +1123,6 @@ function render() {
         ctx.fillRect(s.x, s.y, s.size, s.size);
     }
 
-    // Render Virtual Analog Semi-Transparan (Khusus Mobile saat bermain)
-    if (isMobileDevice && (gameState === 'WAVE_MINIONS' || gameState === 'BOSS_WARNING' || gameState === 'BOSS_FIGHT')) {
-        ctx.save();
-        // Jika belum disentuh, tampilkan posisi panduan samar di kiri bawah
-        const baseX = joystick.active ? joystick.baseX : 95;
-        const baseY = joystick.active ? joystick.baseY : canvas.height - 105;
-        const knobX = joystick.active ? joystick.knobX : baseX;
-        const knobY = joystick.active ? joystick.knobY : baseY;
-
-        // Lingkaran Luar Analog (Sangat transparan)
-        ctx.beginPath();
-        ctx.arc(baseX, baseY, joystick.maxRadius, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
-        ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.28)';
-        ctx.stroke();
-
-        // Lingkaran Dalam / Thumb Knob (Agak transparan)
-        ctx.beginPath();
-        ctx.arc(knobX, knobY, 22, 0, Math.PI * 2);
-        ctx.fillStyle = joystick.active ? 'rgba(56, 189, 248, 0.45)' : 'rgba(148, 163, 184, 0.25)';
-        ctx.fill();
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-        ctx.stroke();
-        ctx.restore();
-    }
-
     // Drops (+HP)
     for (const d of drops) {
         ctx.save();
@@ -1273,6 +1244,35 @@ function render() {
         ctx.font = `bold ${ft.size}px monospace`;
         ctx.textAlign = 'center';
         ctx.fillText(ft.text, ft.x, ft.y);
+    }
+
+    // Render Virtual Analog Semi-Transparan (Khusus Mobile saat bermain)
+    if (isMobileDevice && (gameState === 'WAVE_MINIONS' || gameState === 'BOSS_WARNING' || gameState === 'BOSS_FIGHT')) {
+        ctx.save();
+        // Jika belum disentuh, tampilkan posisi panduan samar di kiri bawah
+        const baseX = joystick.active ? joystick.baseX : 95;
+        const baseY = joystick.active ? joystick.baseY : canvas.height - 105;
+        const knobX = joystick.active ? joystick.knobX : baseX;
+        const knobY = joystick.active ? joystick.knobY : baseY;
+
+        // Lingkaran Luar Analog (Sangat transparan)
+        ctx.beginPath();
+        ctx.arc(baseX, baseY, joystick.maxRadius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.28)';
+        ctx.stroke();
+
+        // Lingkaran Dalam / Thumb Knob (Agak transparan)
+        ctx.beginPath();
+        ctx.arc(knobX, knobY, 22, 0, Math.PI * 2);
+        ctx.fillStyle = joystick.active ? 'rgba(56, 189, 248, 0.45)' : 'rgba(148, 163, 184, 0.25)';
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.stroke();
+        ctx.restore();
     }
 
     // ==========================================
