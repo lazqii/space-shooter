@@ -3,6 +3,23 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+function resizeCanvasToAspect() {
+    const wrapper = document.getElementById('game-wrapper');
+    const rect = wrapper.getBoundingClientRect();
+    const aspect = rect.height / rect.width;
+
+    canvas.width = 480;
+    canvas.height = Math.round(480 * aspect);
+
+    // Pastikan posisi pesawat tetap aman di dalam batas layar baru
+    if (typeof player !== 'undefined') {
+        player.y = Math.min(player.y, canvas.height - 40);
+    }
+}
+
+window.addEventListener('resize', resizeCanvasToAspect);
+resizeCanvasToAspect();
+
 // ==========================================
 // 1. ASSET LOADER
 // ==========================================
@@ -679,7 +696,7 @@ function fireActiveWeapons() {
         // Cabang A: Homing Ice Shard (Fusion Cryo Machine: bertambah menjadi 2 projectile pelacak)
         if (lvlData.seekerIntervalSec && weaponTimers.arcticSeeker <= 0) {
             const seekerCount = playerFusions.cryoMachine ? 2 : 1;
-            const allTargets = getAllActiveTargets().sort((a, b) => 
+            const allTargets = getAllActiveTargets().sort((a, b) =>
                 Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y)
             );
 
