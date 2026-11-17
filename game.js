@@ -1,4 +1,4 @@
-// game.js - Engine Utama dengan 6 Senjata, Evolusi, Fusion Eksklusif & UI Minimalis
+// game.js - Engine Utama dengan 6 Senjata, Evolusi, Fusion Pengganti Senjata & UI Minimalis
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -64,7 +64,7 @@ let currentExp = 0;
 let expToNextLevel = GAME_CONFIG.leveling.baseExpRequired;
 let pendingLevelUps = 0;
 
-// Level masing-masing dari 6 senjata (null jika belum dibuka)
+// Level masing-masing dari 6 senjata (null jika belum dibuka atau sudah melebur jadi Fusion)
 let playerSkills = {
     laser: '1',
     he: null,
@@ -84,16 +84,18 @@ let weaponTimers = {
     shockwave: 0,
     flameCooldown: 0,
     flameActive: 0,
-    flameTick: 0
+    flameTick: 0,
+    fusionMain: 0,
+    fusionSub: 0
 };
 
 // Status 5 Senjata Fusion (aktif jika true)
 let playerFusions = {
-    cryoMachine: false, // Laser 6B + Arctic 6A
-    timeStop: false,    // HE 6B + Arctic 6A
-    doom: false,        // Laser 6A + HE 6A
-    inferno: false,     // Lightning 6A + Flame Thrower 6B
-    electroDoom: false  // Lightning 6A + HE 6A
+    cryoMachine: false, // Menggantikan Laser 6B + Arctic 6A
+    timeStop: false,    // Menggantikan HE 6B + Arctic 6A
+    doom: false,        // Menggantikan Laser 6A + HE 6A
+    inferno: false,     // Menggantikan Lightning 6A + Flame Thrower 6B (tanpa semburan api)
+    electroDoom: false  // Menggantikan Lightning 6A + HE 6A
 };
 
 // State khusus Lightning Overload (Cabang A), Inferno & visual petir
@@ -101,7 +103,7 @@ let lightningState = {
     lockedTarget: null,
     lockFrames: 0,
     lastStackCount: 0,
-    currentIntensity: 0, // Menyimpan tingkat ketebalan & kecerahan untuk visual Inferno
+    currentIntensity: 0,
     visualBolts: []
 };
 
@@ -140,7 +142,7 @@ for (let i = 0; i < 70; i++) {
 }
 
 // ==========================================
-// 3. SISTEM EXP & SKILL TREE (DENGAN PEMBATAS FUSION EKSKLUSIF)
+// 3. SISTEM EXP, SKILL TREE & PELEBURAN FUSION
 // ==========================================
 function getUsedFusionWeapons() {
     const used = new Set();
@@ -155,27 +157,33 @@ function getUsedFusionWeapons() {
     return used;
 }
 
+function consumeFusionMaterials(fusionKey) {
+    const fData = GAME_CONFIG.fusions ? GAME_CONFIG.fusions[fusionKey] : null;
+    if (!fData || !fData.req) return;
+    for (const wKey in fData.req) {
+        playerSkills[wKey] = null;
+    }
+    if (fusionKey === 'inferno') {
+        weaponTimers.flameActive = 0;
+        weaponTimers.flameCooldown = 0;
+        weaponTimers.flameTick = 0;
+    }
+}
+
 function getAvailableSkillUpgrades() {
     const pool = [];
     const weaponKeys = ['laser', 'he', 'lightning', 'arctic', 'shockwave', 'flamethrower'];
-
-    // 1. Cek Senjata Fusion:
-    // Syarat: kedua senjata MAX, player min. level 15, DAN belum ada satupun senjata yang dipakai di fusion lain
     const usedFusionWeapons = getUsedFusionWeapons();
-    const fusionCards = [];
 
+    // 1. Cek Senjata Fusion (Kedua senjata wajib MAX & min. level 15 & belum terpakai di fusion lain)
+    const fusionCards = [];
     if (GAME_CONFIG.fusions && playerLevel >= 15) {
         for (const fKey in GAME_CONFIG.fusions) {
             const fData = GAME_CONFIG.fusions[fKey];
             if (!playerFusions[fKey]) {
                 let eligible = true;
                 for (const rW in fData.req) {
-                    // Pembatas: jika salah satu senjata sudah dipakai dalam fusion aktif, jangan munculkan lagi
-                    if (usedFusionWeapons.has(rW)) {
-                        eligible = false;
-                        break;
-                    }
-                    if (playerSkills[rW] !== fData.req[rW]) {
+                    if (usedFusionWeapons.has(rW) || playerSkills[rW] !== fData.req[rW]) {
                         eligible = false;
                         break;
                     }
@@ -193,8 +201,10 @@ function getAvailableSkillUpgrades() {
         }
     }
 
-    // 2. Kumpulkan upgrade senjata normal
+    // 2. Kumpulkan upgrade senjata normal (kecuali senjata yang sudah melebur ke dalam Fusion)
     for (const wKey of weaponKeys) {
+        if (usedFusionWeapons.has(wKey)) continue;
+
         const wCfg = GAME_CONFIG.weapons[wKey];
         if (!wCfg) continue;
         const curLvl = playerSkills[wKey];
@@ -284,6 +294,8 @@ function triggerSkillSelection() {
 function applySkillChoice(choice) {
     if (choice.isFusion) {
         playerFusions[choice.fusionKey] = true;
+        consumeFusionMaterials(choice.fusionKey);
+
         const cleanTitle = choice.title.replace('FUSION: ', '');
         spawnFloatingText(player.x, player.y - 45, `FUSION: ${cleanTitle}!`, '#f8fafc', 16);
         createExplosion(player.x, player.y, ['#e2e8f0', '#ffffff', '#94a3b8'], 32);
@@ -465,7 +477,7 @@ window.addEventListener('touchend', (e) => {
 window.addEventListener('touchcancel', resetJoystick);
 
 // ==========================================
-// 5. SETUP WAVE & LOGIKA PENEMBAKAN 6 SENJATA
+// 5. SETUP WAVE & LOGIKA PENEMBAKAN 6 SENJATA + 5 FUSION MANDIRI
 // ==========================================
 function setupWave(waveNum) {
     wave = waveNum;
@@ -496,7 +508,9 @@ function startGame() {
         shockwave: 0,
         flameCooldown: 0,
         flameActive: 0,
-        flameTick: 0
+        flameTick: 0,
+        fusionMain: 0,
+        fusionSub: 0
     };
     playerFusions = { cryoMachine: false, timeStop: false, doom: false, inferno: false, electroDoom: false };
     lightningState = { lockedTarget: null, lockFrames: 0, lastStackCount: 0, currentIntensity: 0, visualBolts: [] };
@@ -539,90 +553,189 @@ function findNearestTarget(fromX, fromY, excludeList = [], maxDist = Infinity) {
     return nearest;
 }
 
+// Helper eksekusi Lightning Singularity (dipakai oleh senjata normal & Fusion Inferno / Electro Doom)
+function executeLightningOverload(lvlData, wCfg, options = {}) {
+    if (!lvlData || !wCfg) return;
+
+    const primary = findNearestTarget(player.x, player.y, [], wCfg.maxRange || 380);
+    if (!primary) {
+        lightningState.lockedTarget = null;
+        lightningState.lockFrames = 0;
+        lightningState.lastStackCount = 0;
+        lightningState.currentIntensity = 0;
+        return;
+    }
+
+    const baseCd = wCfg.baseCooldown || 12;
+    let finalAtk = lvlData.atk || 5;
+    let currentStacks = 0;
+
+    if (lvlData.rampIntervalSec) {
+        if (lightningState.lockedTarget === primary) {
+            lightningState.lockFrames += baseCd;
+            currentStacks = Math.floor(lightningState.lockFrames / (lvlData.rampIntervalSec * 60));
+
+            const lockSeconds = Math.max(1, lightningState.lockFrames / 60);
+            const maxTotalBonus = (lvlData.maxBonusPerSec || 10) * lockSeconds;
+            const bonusDmg = Math.min(maxTotalBonus, currentStacks * (lvlData.rampBonus || 2));
+            finalAtk += bonusDmg;
+
+            // Cek jika stack baru saja naik (terjadi peningkatan DMG)
+            if (currentStacks > lightningState.lastStackCount) {
+                lightningState.lastStackCount = currentStacks;
+
+                if (options.isElectroDoom && GAME_CONFIG.weapons.he) {
+                    const heCfg = GAME_CONFIG.weapons.he;
+                    const heLvl = heCfg.levels['6a'];
+                    triggerHeExplosion({
+                        x: primary.x,
+                        y: primary.y,
+                        atk: heCfg.baseAtk,
+                        radius: heCfg.explosionRadius * 1.15,
+                        lvlData: heLvl,
+                        forceCrit: true,
+                        isElectroDoom: true
+                    }, primary);
+                    spawnFloatingText(primary.x, primary.y - 36, 'ELECTRO DOOM!', '#fde047', 14);
+                }
+            }
+        } else {
+            lightningState.lockedTarget = primary;
+            lightningState.lockFrames = 0;
+            lightningState.lastStackCount = 0;
+            currentStacks = 0;
+        }
+    }
+
+    lightningState.currentIntensity = currentStacks;
+
+    // PASIF BURN INFERNO: Selalu aktif bersamaan dengan Lightning Chain pada target yang sama
+    if (options.isInferno) {
+        if (!primary.status) updateStatusEffects(primary);
+        const ftCfg = GAME_CONFIG.weapons.flamethrower;
+        const ftLvl = ftCfg && ftCfg.levels ? ftCfg.levels['6b'] : null;
+
+        const baseBurn = ftLvl ? ftLvl.burnDmg : 4;
+        const burnDur = ftLvl ? ftLvl.burnDurationSec : 2.5;
+        const lockSec = Math.max(1, lightningState.lockFrames / 60);
+
+        // Peningkatan +3 dmg tiap 2 detik (batas maksimal +10 dmg/detik = +5 per 0.5 detik)
+        const maxBurnBonus = 5 * lockSec;
+        const infernoBonus = Math.min(maxBurnBonus, currentStacks * 3);
+
+        applyBurnToTarget(primary, baseBurn + infernoBonus, burnDur);
+
+        const flameColors = currentStacks > 0
+            ? ['#ffffff', '#fef08a', '#f97316']
+            : ['#f97316', '#facc15'];
+        createExplosion(primary.x, primary.y, flameColors, 4 + Math.min(8, currentStacks * 2));
+    }
+
+    applyDamageToTarget(primary, finalAtk, options.isInferno ? '#fb923c' : '#fde047', false);
+    createExplosion(primary.x, primary.y, ['#eab308', '#fef08a'], 4);
+    lightningState.visualBolts.push({
+        x1: player.x,
+        y1: player.y - 24,
+        x2: primary.x,
+        y2: primary.y,
+        life: 6,
+        intensity: options.isInferno ? currentStacks : 0
+    });
+
+    if (lvlData.chains > 0) {
+        const hitTargets = [primary];
+        let lastNode = primary;
+        for (let c = 0; c < lvlData.chains; c++) {
+            const nextNode = findNearestTarget(lastNode.x, lastNode.y, hitTargets, wCfg.chainRadius || 155);
+            if (!nextNode) break;
+            hitTargets.push(nextNode);
+            applyDamageToTarget(nextNode, finalAtk, '#facc15', false);
+            createExplosion(nextNode.x, nextNode.y, ['#eab308', '#ffffff'], 3);
+            lightningState.visualBolts.push({
+                x1: lastNode.x,
+                y1: lastNode.y,
+                x2: nextNode.x,
+                y2: nextNode.y,
+                life: 6,
+                intensity: 0
+            });
+            lastNode = nextNode;
+        }
+    }
+}
+
+// Helper eksekusi Flame Thrower normal (tidak dipanggil saat Fusion Inferno aktif)
+function executeFlameThrower(ftLvl, ftCfg) {
+    if (!ftLvl || !ftCfg) return;
+
+    if (weaponTimers.flameActive > 0) {
+        weaponTimers.flameActive--;
+        weaponTimers.flameTick++;
+
+        const coneRange = (ftCfg.baseRange || 165) * (ftLvl.rangeMult || 1.0);
+        const halfSpread = ftCfg.baseSpread || 0.42;
+
+        if (weaponTimers.flameTick % 15 === 0) {
+            for (const t of getAllActiveTargets()) {
+                const dx = t.x - player.x;
+                const dy = t.y - (player.y - 28);
+                const dist = Math.hypot(dx, dy);
+
+                if (dy < 10 && dist <= coneRange + t.width * 0.35) {
+                    const angleFromUp = Math.abs(Math.atan2(dx, -dy));
+                    if (angleFromUp <= halfSpread) {
+                        applyDamageToTarget(t, ftLvl.atk, '#fb923c', false);
+                        applyBurnToTarget(t, ftLvl.burnDmg, ftLvl.burnDurationSec);
+                    }
+                }
+            }
+        }
+
+        if (weaponTimers.flameActive <= 0) {
+            weaponTimers.flameCooldown = Math.round((ftLvl.cooldownSec || 2.0) * 60);
+        }
+    } else {
+        if (weaponTimers.flameCooldown > 0) {
+            weaponTimers.flameCooldown--;
+        } else {
+            weaponTimers.flameActive = Math.round((ftLvl.durationSec || 2.0) * 60);
+            weaponTimers.flameTick = 0;
+        }
+    }
+}
+
 function fireActiveWeapons() {
-    // 1. LASER GUN (Termasuk Fusion: DOOM & CRYO MACHINE)
+    // ====================================================
+    // A. SENJATA NORMAL YANG BELUM MELEBUR MENJADI FUSION
+    // ====================================================
+
+    // 1. LASER GUN
     if (playerSkills.laser && weaponTimers.laser <= 0) {
         const wCfg = GAME_CONFIG.weapons.laser;
         const lvlData = wCfg.levels[playerSkills.laser];
+        const branches = lvlData.branches;
+        const spread = lvlData.spread;
+        const speed = lvlData.speed;
 
-        if (playerFusions.doom) {
-            const heCfg = GAME_CONFIG.weapons.he;
-            const heLvl = heCfg.levels['6a'];
-            const branches = 5;
-            const spread = 0.36;
-            const speed = 9.2;
-
-            for (let i = 0; i < branches; i++) {
+        for (let i = 0; i < branches; i++) {
+            let vx = 0;
+            let vy = -speed;
+            if (branches > 1 && spread > 0) {
                 const angle = -Math.PI / 2 + (i - (branches - 1) / 2) * (spread / (branches - 1) * 2);
-                projectiles.push({
-                    kind: 'he',
-                    isDoom: true,
-                    x: player.x,
-                    y: player.y - 28,
-                    vx: Math.cos(angle) * speed,
-                    vy: Math.sin(angle) * speed,
-                    atk: heCfg.baseAtk * 1.15,
-                    radius: heCfg.explosionRadius * 1.1,
-                    lvlData: heLvl,
-                    color: '#ef4444'
-                });
+                vx = Math.cos(angle) * speed;
+                vy = Math.sin(angle) * speed;
             }
-            weaponTimers.laser = Math.max(1, Math.round(wCfg.baseCooldown / lvlData.shotsPerSec));
-        } else if (playerFusions.cryoMachine) {
-            const branches = lvlData.branches;
-            const spread = lvlData.spread;
-            const speed = lvlData.speed;
-            const arcCfg = GAME_CONFIG.weapons.arctic;
-            const arcLvl = arcCfg.levels['6a'];
-
-            for (let i = 0; i < branches; i++) {
-                let vx = 0;
-                let vy = -speed;
-                if (branches > 1 && spread > 0) {
-                    const angle = -Math.PI / 2 + (i - (branches - 1) / 2) * (spread / (branches - 1) * 2);
-                    vx = Math.cos(angle) * speed;
-                    vy = Math.sin(angle) * speed;
-                }
-                projectiles.push({
-                    kind: 'arctic',
-                    isCryoMachine: true,
-                    x: player.x,
-                    y: player.y - 28,
-                    vx,
-                    vy,
-                    atk: wCfg.baseAtk + 5,
-                    slow: arcLvl.slow,
-                    duration: arcCfg.freezeDuration,
-                    cd: arcCfg.freezeCd,
-                    color: '#38bdf8'
-                });
-            }
-            weaponTimers.laser = Math.max(1, Math.round(wCfg.baseCooldown / lvlData.shotsPerSec));
-        } else {
-            const branches = lvlData.branches;
-            const spread = lvlData.spread;
-            const speed = lvlData.speed;
-
-            for (let i = 0; i < branches; i++) {
-                let vx = 0;
-                let vy = -speed;
-                if (branches > 1 && spread > 0) {
-                    const angle = -Math.PI / 2 + (i - (branches - 1) / 2) * (spread / (branches - 1) * 2);
-                    vx = Math.cos(angle) * speed;
-                    vy = Math.sin(angle) * speed;
-                }
-                projectiles.push({
-                    kind: 'laser',
-                    x: player.x,
-                    y: player.y - 28,
-                    vx,
-                    vy,
-                    atk: wCfg.baseAtk,
-                    color: wCfg.color
-                });
-            }
-            weaponTimers.laser = Math.max(1, Math.round(wCfg.baseCooldown / lvlData.shotsPerSec));
+            projectiles.push({
+                kind: 'laser',
+                x: player.x,
+                y: player.y - 28,
+                vx,
+                vy,
+                atk: wCfg.baseAtk,
+                color: wCfg.color
+            });
         }
+        weaponTimers.laser = Math.max(1, Math.round(wCfg.baseCooldown / lvlData.shotsPerSec));
     }
 
     // 2. HE CANNON
@@ -638,115 +751,17 @@ function fireActiveWeapons() {
             atk: wCfg.baseAtk,
             radius: wCfg.explosionRadius,
             lvlData,
-            color: playerFusions.timeStop ? '#60a5fa' : wCfg.color
+            color: wCfg.color
         });
         weaponTimers.he = wCfg.baseCooldown;
     }
 
-    // 3. LIGHTNING CHAIN (Optimalisasi + Fusion: Inferno & Electro Doom)
+    // 3. LIGHTNING CHAIN
     if (playerSkills.lightning && weaponTimers.lightning <= 0) {
         const wCfg = GAME_CONFIG.weapons.lightning;
         const lvlData = wCfg.levels[playerSkills.lightning];
-        const primary = findNearestTarget(player.x, player.y, [], wCfg.maxRange);
-
-        if (primary) {
-            let finalAtk = lvlData.atk;
-            let currentStacks = 0;
-
-            // Evolusi Cabang A: Overload (DMG target sama meningkat tiap 2 dtk, max +10/dtk)
-            if (lvlData.rampIntervalSec) {
-                if (lightningState.lockedTarget === primary) {
-                    lightningState.lockFrames += wCfg.baseCooldown;
-                    currentStacks = Math.floor(lightningState.lockFrames / (lvlData.rampIntervalSec * 60));
-
-                    const lockSeconds = Math.max(1, lightningState.lockFrames / 60);
-                    const maxTotalBonus = (lvlData.maxBonusPerSec || 10) * lockSeconds;
-                    const bonusDmg = Math.min(maxTotalBonus, currentStacks * lvlData.rampBonus);
-                    finalAtk += bonusDmg;
-
-                    // Cek jika baru saja terjadi peningkatan damage (stack baru terpicu)
-                    if (currentStacks > lightningState.lastStackCount) {
-                        lightningState.lastStackCount = currentStacks;
-
-                        // FUSION 5: ELECTRO DOOM (Lightning 6A + HE Gun 6A)
-                        // Saat peningkatan dmg lightning chain terpicu, menyebabkan ledakan critical HE gun
-                        if (playerFusions.electroDoom) {
-                            const heCfg = GAME_CONFIG.weapons.he;
-                            const heLvl = heCfg.levels['6a'];
-                            triggerHeExplosion({
-                                x: primary.x,
-                                y: primary.y,
-                                atk: heCfg.baseAtk,
-                                radius: heCfg.explosionRadius * 1.15,
-                                lvlData: heLvl,
-                                forceCrit: true,
-                                isElectroDoom: true
-                            }, primary);
-                            spawnFloatingText(primary.x, primary.y - 36, 'ELECTRO DOOM!', '#fde047', 14);
-                        }
-                    }
-                } else {
-                    lightningState.lockedTarget = primary;
-                    lightningState.lockFrames = 0;
-                    lightningState.lastStackCount = 0;
-                    currentStacks = 0;
-                }
-            }
-
-            lightningState.currentIntensity = currentStacks;
-
-            // FUSION 4: INFERNO (Lightning 6A + Flame Thrower 6B)
-            // Saat lightning chain menyerang target yang sama, efek burn terus diterapkan & meningkat +3 dmg/2dtk (maks +10/dtk)
-            if (playerFusions.inferno) {
-                if (!primary.status) updateStatusEffects(primary);
-                const ftCfg = GAME_CONFIG.weapons.flamethrower;
-                const ftLvl = ftCfg.levels['6b'];
-                const baseBurn = ftLvl.burnDmg; // 4 dmg per 0.5 dtk
-                const lockSec = Math.max(1, lightningState.lockFrames / 60);
-                // Maks +10/dtk = +5 per 0.5 dtk tick
-                const maxBurnBonus = 5 * lockSec;
-                const infernoBonus = Math.min(maxBurnBonus, currentStacks * 3);
-
-                applyBurnToTarget(primary, baseBurn + infernoBonus, ftLvl.burnDurationSec);
-                createExplosion(primary.x, primary.y, ['#f97316', '#facc15', '#ffffff'], 4 + Math.min(8, currentStacks * 2));
-            }
-
-            applyDamageToTarget(primary, finalAtk, playerFusions.inferno ? '#fb923c' : '#fde047', false);
-            createExplosion(primary.x, primary.y, ['#eab308', '#fef08a'], 4);
-            lightningState.visualBolts.push({
-                x1: player.x, y1: player.y - 24,
-                x2: primary.x, y2: primary.y,
-                life: 6,
-                intensity: playerFusions.inferno ? currentStacks : 0
-            });
-
-            // Evolusi Cabang B: Arc Storm (Menyambar musuh di sekitar target utama)
-            if (lvlData.chains > 0) {
-                const hitTargets = [primary];
-                let lastNode = primary;
-                for (let c = 0; c < lvlData.chains; c++) {
-                    const nextNode = findNearestTarget(lastNode.x, lastNode.y, hitTargets, wCfg.chainRadius);
-                    if (!nextNode) break;
-                    hitTargets.push(nextNode);
-                    applyDamageToTarget(nextNode, finalAtk, '#facc15', false);
-                    createExplosion(nextNode.x, nextNode.y, ['#eab308', '#ffffff'], 3);
-                    lightningState.visualBolts.push({
-                        x1: lastNode.x, y1: lastNode.y,
-                        x2: nextNode.x, y2: nextNode.y,
-                        life: 6,
-                        intensity: 0
-                    });
-                    lastNode = nextNode;
-                }
-            }
-
-            weaponTimers.lightning = wCfg.baseCooldown;
-        } else {
-            lightningState.lockedTarget = null;
-            lightningState.lockFrames = 0;
-            lightningState.lastStackCount = 0;
-            lightningState.currentIntensity = 0;
-        }
+        executeLightningOverload(lvlData, wCfg, { isInferno: false, isElectroDoom: false });
+        weaponTimers.lightning = wCfg.baseCooldown;
     }
 
     // 4. ARCTIC BULLET
@@ -771,44 +786,33 @@ function fireActiveWeapons() {
         }
 
         if (lvlData.seekerIntervalSec && weaponTimers.arcticSeeker <= 0) {
-            const seekerCount = playerFusions.cryoMachine ? 2 : 1;
-            const allTargets = getAllActiveTargets().sort((a, b) =>
-                Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y)
-            );
-
-            for (let k = 0; k < seekerCount; k++) {
-                const target = allTargets[k] || allTargets[0];
-                if (target) {
-                    const baseAngle = Math.atan2(target.y - (player.y - 24), target.x - player.x);
-                    const angleOffset = seekerCount > 1 ? (k === 0 ? -0.22 : 0.22) : 0;
-                    const finalAngle = baseAngle + angleOffset;
-                    const speed = 9.5;
-                    projectiles.push({
-                        kind: 'arctic_seeker',
-                        target,
-                        speed,
-                        x: player.x + (k === 0 ? -10 : 10),
-                        y: player.y - 24,
-                        vx: Math.cos(finalAngle) * speed,
-                        vy: Math.sin(finalAngle) * speed,
-                        atk: lvlData.atk * lvlData.seekerDmgMult,
-                        slow: lvlData.slow,
-                        duration: wCfg.freezeDuration,
-                        cd: wCfg.freezeCd,
-                        color: playerFusions.cryoMachine ? '#38bdf8' : '#22d3ee'
-                    });
-                }
+            const target = findNearestTarget(player.x, player.y);
+            if (target) {
+                const angle = Math.atan2(target.y - (player.y - 24), target.x - player.x);
+                const speed = 9.5;
+                projectiles.push({
+                    kind: 'arctic_seeker',
+                    target,
+                    speed,
+                    x: player.x,
+                    y: player.y - 24,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    atk: lvlData.atk * lvlData.seekerDmgMult,
+                    slow: lvlData.slow,
+                    duration: wCfg.freezeDuration,
+                    cd: wCfg.freezeCd,
+                    color: '#22d3ee'
+                });
             }
             weaponTimers.arcticSeeker = Math.round(lvlData.seekerIntervalSec * 60);
         }
 
-        if (lvlData.shieldIntervalSec) {
-            if (weaponTimers.arcticShield <= 0) {
-                player.hasShield = true;
-                weaponTimers.arcticShield = Math.round(lvlData.shieldIntervalSec * 60);
-                spawnFloatingText(player.x, player.y - 38, 'SHIELD READY', '#67e8f9', 12);
-                createExplosion(player.x, player.y, ['#67e8f9', '#ffffff'], 14);
-            }
+        if (lvlData.shieldIntervalSec && weaponTimers.arcticShield <= 0) {
+            player.hasShield = true;
+            weaponTimers.arcticShield = Math.round(lvlData.shieldIntervalSec * 60);
+            spawnFloatingText(player.x, player.y - 38, 'SHIELD READY', '#67e8f9', 12);
+            createExplosion(player.x, player.y, ['#67e8f9', '#ffffff'], 14);
         }
     }
 
@@ -864,46 +868,161 @@ function fireActiveWeapons() {
         weaponTimers.shockwave = swCfg.baseCooldown;
     }
 
-    // 6. FLAME THROWER (Senjata Baru: Semburan api jarak pendek berdurasi & berjeda)
-    if (playerSkills.flamethrower) {
+    // 6. FLAME THROWER (Hanya aktif jika belum melebur menjadi Inferno)
+    if (playerSkills.flamethrower && !playerFusions.inferno && GAME_CONFIG.weapons.flamethrower) {
         const ftCfg = GAME_CONFIG.weapons.flamethrower;
         const ftLvl = ftCfg.levels[playerSkills.flamethrower];
+        executeFlameThrower(ftLvl, ftCfg);
+    }
 
-        if (weaponTimers.flameActive > 0) {
-            weaponTimers.flameActive--;
-            weaponTimers.flameTick++;
+    // ====================================================
+    // B. SENJATA FUSION AKTIF (MENGGANTIKAN SENJATA BAHAN)
+    // ====================================================
 
-            const coneRange = ftCfg.baseRange * ftLvl.rangeMult;
-            const halfSpread = ftCfg.baseSpread;
+    // FUSION 1: CRYO MACHINE (Menggantikan Laser 6B + Arctic 6A)
+    if (playerFusions.cryoMachine) {
+        const laserCfg = GAME_CONFIG.weapons.laser;
+        const laserLvl = laserCfg.levels['6b'];
+        const arcCfg = GAME_CONFIG.weapons.arctic;
+        const arcLvl = arcCfg.levels['6a'];
 
-            // Berikan damage semburan & efek burn setiap 0.25 detik (15 frame) selama semburan menyentuh musuh
-            if (weaponTimers.flameTick % 15 === 0) {
-                for (const t of getAllActiveTargets()) {
-                    const dx = t.x - player.x;
-                    const dy = t.y - (player.y - 28);
-                    const dist = Math.hypot(dx, dy);
+        if (weaponTimers.fusionMain <= 0) {
+            projectiles.push({
+                kind: 'arctic',
+                isCryoMachine: true,
+                x: player.x,
+                y: player.y - 28,
+                vx: 0,
+                vy: -laserLvl.speed,
+                atk: laserCfg.baseAtk + arcLvl.atk * 0.5,
+                slow: arcLvl.slow,
+                duration: arcCfg.freezeDuration,
+                cd: arcCfg.freezeCd,
+                color: '#38bdf8'
+            });
+            weaponTimers.fusionMain = Math.max(1, Math.round(laserCfg.baseCooldown / laserLvl.shotsPerSec));
+        }
 
-                    if (dy < 10 && dist <= coneRange + t.width * 0.35) {
-                        const angleFromUp = Math.abs(Math.atan2(dx, -dy));
-                        if (angleFromUp <= halfSpread) {
-                            applyDamageToTarget(t, ftLvl.atk, '#fb923c', false);
-                            applyBurnToTarget(t, ftLvl.burnDmg, ftLvl.burnDurationSec);
-                        }
-                    }
+        if (weaponTimers.fusionSub <= 0) {
+            const allTargets = getAllActiveTargets().sort((a, b) =>
+                Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y)
+            );
+            for (let k = 0; k < 2; k++) {
+                const target = allTargets[k] || allTargets[0];
+                if (target) {
+                    const baseAngle = Math.atan2(target.y - (player.y - 24), target.x - player.x);
+                    const finalAngle = baseAngle + (k === 0 ? -0.22 : 0.22);
+                    const speed = 9.5;
+                    projectiles.push({
+                        kind: 'arctic_seeker',
+                        target,
+                        speed,
+                        x: player.x + (k === 0 ? -10 : 10),
+                        y: player.y - 24,
+                        vx: Math.cos(finalAngle) * speed,
+                        vy: Math.sin(finalAngle) * speed,
+                        atk: arcLvl.atk * arcLvl.seekerDmgMult,
+                        slow: arcLvl.slow,
+                        duration: arcCfg.freezeDuration,
+                        cd: arcCfg.freezeCd,
+                        color: '#38bdf8'
+                    });
                 }
             }
-
-            if (weaponTimers.flameActive <= 0) {
-                weaponTimers.flameCooldown = Math.round(ftLvl.cooldownSec * 60);
-            }
-        } else {
-            if (weaponTimers.flameCooldown > 0) {
-                weaponTimers.flameCooldown--;
-            } else {
-                weaponTimers.flameActive = Math.round(ftLvl.durationSec * 60);
-                weaponTimers.flameTick = 0;
-            }
+            weaponTimers.fusionSub = Math.round(arcLvl.seekerIntervalSec * 60);
         }
+    }
+
+    // FUSION 2: TIME STOP (Menggantikan HE 6B + Arctic 6A)
+    if (playerFusions.timeStop) {
+        const heCfg = GAME_CONFIG.weapons.he;
+        const heLvl = heCfg.levels['6b'];
+        const arcCfg = GAME_CONFIG.weapons.arctic;
+        const arcLvl = arcCfg.levels['6a'];
+
+        if (weaponTimers.fusionMain <= 0) {
+            projectiles.push({
+                kind: 'he',
+                isTimeStopShot: true,
+                x: player.x,
+                y: player.y - 30,
+                vx: 0,
+                vy: -8.8,
+                atk: heCfg.baseAtk + 10,
+                radius: heCfg.explosionRadius,
+                lvlData: heLvl,
+                color: '#60a5fa'
+            });
+            weaponTimers.fusionMain = heCfg.baseCooldown;
+        }
+
+        if (weaponTimers.fusionSub <= 0) {
+            const target = findNearestTarget(player.x, player.y);
+            if (target) {
+                const angle = Math.atan2(target.y - (player.y - 24), target.x - player.x);
+                const speed = 9.5;
+                projectiles.push({
+                    kind: 'arctic_seeker',
+                    target,
+                    speed,
+                    x: player.x,
+                    y: player.y - 24,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    atk: arcLvl.atk * arcLvl.seekerDmgMult,
+                    slow: arcLvl.slow,
+                    duration: arcCfg.freezeDuration,
+                    cd: arcCfg.freezeCd,
+                    color: '#60a5fa'
+                });
+            }
+            weaponTimers.fusionSub = Math.round(arcLvl.seekerIntervalSec * 60);
+        }
+    }
+
+    // FUSION 3: DOOM (Menggantikan Laser 6A + HE 6A)
+    if (playerFusions.doom && weaponTimers.fusionMain <= 0) {
+        const laserCfg = GAME_CONFIG.weapons.laser;
+        const laserLvl = laserCfg.levels['6a'];
+        const heCfg = GAME_CONFIG.weapons.he;
+        const heLvl = heCfg.levels['6a'];
+        const branches = 5;
+        const spread = 0.36;
+        const speed = 9.2;
+
+        for (let i = 0; i < branches; i++) {
+            const angle = -Math.PI / 2 + (i - (branches - 1) / 2) * (spread / (branches - 1) * 2);
+            projectiles.push({
+                kind: 'he',
+                isDoom: true,
+                x: player.x,
+                y: player.y - 28,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                atk: heCfg.baseAtk * 1.15,
+                radius: heCfg.explosionRadius * 1.1,
+                lvlData: heLvl,
+                color: '#ef4444'
+            });
+        }
+        weaponTimers.fusionMain = Math.max(1, Math.round(laserCfg.baseCooldown / laserLvl.shotsPerSec));
+    }
+
+    // FUSION 4: INFERNO (Menggantikan Lightning 6A + Flame Thrower 6B)
+    // Semburan api dihilangkan sepenuhnya & digantikan pasif burn yang selalu aktif bersama Lightning Chain
+    if (playerFusions.inferno && weaponTimers.fusionMain <= 0) {
+        const lgtCfg = GAME_CONFIG.weapons.lightning;
+        const lgtLvl = lgtCfg.levels['6a'];
+        executeLightningOverload(lgtLvl, lgtCfg, { isInferno: true, isElectroDoom: false });
+        weaponTimers.fusionMain = lgtCfg.baseCooldown || 12;
+    }
+
+    // FUSION 5: ELECTRO DOOM (Menggantikan Lightning 6A + HE 6A)
+    if (playerFusions.electroDoom && weaponTimers.fusionMain <= 0) {
+        const lgtCfg = GAME_CONFIG.weapons.lightning;
+        const lgtLvl = lgtCfg.levels['6a'];
+        executeLightningOverload(lgtLvl, lgtCfg, { isInferno: false, isElectroDoom: true });
+        weaponTimers.fusionMain = lgtCfg.baseCooldown || 12;
     }
 }
 
@@ -975,7 +1094,6 @@ function updateStatusEffects(target) {
     if (st.timeStopCdTimer > 0) st.timeStopCdTimer--;
     if (st.timeStopTimer > 0) st.timeStopTimer--;
 
-    // Efek Burn: tick setiap 0.5 detik (30 frame)
     if (st.burnTimer > 0) {
         st.burnTimer--;
         st.burnTickTimer++;
@@ -1012,7 +1130,7 @@ function updateStatusEffects(target) {
 
 function triggerHeExplosion(proj, directTarget) {
     const lvl = proj.lvlData;
-    const isTimeStop = playerFusions.timeStop;
+    const isTimeStop = playerFusions.timeStop || proj.isTimeStopShot;
     const blastRadius = isTimeStop ? proj.radius * 1.55 : proj.radius;
 
     if (proj.isElectroDoom) {
@@ -1049,7 +1167,6 @@ function triggerHeExplosion(proj, directTarget) {
             }
 
             if (lvl.burnPct) {
-                // Konversi burnPct/dtk ke burn per 0.5 detik
                 applyBurnToTarget(target, (proj.atk * lvl.burnPct) * 0.5, lvl.burnDuration);
             }
 
@@ -1202,6 +1319,8 @@ function update() {
     if (weaponTimers.arcticSeeker > 0) weaponTimers.arcticSeeker--;
     if (weaponTimers.arcticShield > 0) weaponTimers.arcticShield--;
     if (weaponTimers.shockwave > 0) weaponTimers.shockwave--;
+    if (weaponTimers.fusionMain > 0) weaponTimers.fusionMain--;
+    if (weaponTimers.fusionSub > 0) weaponTimers.fusionSub--;
 
     fireActiveWeapons();
 
@@ -1536,13 +1655,16 @@ function drawSpriteEntity(entity, img, x, y, w, h, rotateDown = false, fallbackC
 function drawLightningBolt(x1, y1, x2, y2, intensity = 0) {
     ctx.save();
     const boost = Math.min(5, intensity);
-    const isInferno = playerFusions.inferno && boost > 0;
+    const isInferno = playerFusions.inferno;
 
-    // Cahaya dari lightning semakin tebal dan terang saat terjadi peningkatan dmg (Inferno)
-    ctx.strokeStyle = isInferno ? '#fffbeb' : '#fde047';
+    // Cahaya lightning & aura api semakin tebal dan terang saat terjadi peningkatan dmg
+    ctx.strokeStyle = isInferno
+        ? (boost > 0 ? '#ffffff' : '#fde047')
+        : '#fde047';
     ctx.shadowColor = isInferno ? '#f97316' : '#eab308';
-    ctx.shadowBlur = 10 + boost * 4;
-    ctx.lineWidth = 2.5 + boost * 0.9;
+    ctx.shadowBlur = isInferno ? (14 + boost * 5) : 10;
+    ctx.lineWidth = isInferno ? (3.2 + boost * 1.1) : 2.5;
+
     ctx.beginPath();
     ctx.moveTo(x1, y1);
 
@@ -1555,36 +1677,36 @@ function drawLightningBolt(x1, y1, x2, y2, intensity = 0) {
     }
     ctx.lineTo(x2, y2);
     ctx.stroke();
+
+    // Lapisan cahaya api menyelimuti petir saat Inferno aktif
+    if (isInferno) {
+        ctx.strokeStyle = boost > 0 ? 'rgba(251, 146, 60, 0.75)' : 'rgba(249, 115, 22, 0.45)';
+        ctx.lineWidth = 6 + boost * 1.8;
+        ctx.stroke();
+    }
+
     ctx.restore();
 }
 
 function drawFlameThrowerCone() {
-    if (!playerSkills.flamethrower || weaponTimers.flameActive <= 0) return;
+    // Semburan api dihilangkan sepenuhnya jika Fusion Inferno sudah aktif
+    if (playerFusions.inferno || !playerSkills.flamethrower || weaponTimers.flameActive <= 0) return;
 
     const ftCfg = GAME_CONFIG.weapons.flamethrower;
+    if (!ftCfg) return;
     const ftLvl = ftCfg.levels[playerSkills.flamethrower];
+    if (!ftLvl) return;
+
     const coneRange = ftCfg.baseRange * ftLvl.rangeMult;
     const halfSpread = ftCfg.baseSpread;
     const startX = player.x;
     const startY = player.y - 26;
 
-    // Cahaya dari flame semakin tebal dan terang saat terjadi peningkatan dmg (Inferno)
-    const infernoBoost = playerFusions.inferno ? Math.min(5, lightningState.currentIntensity) : 0;
-
     ctx.save();
     const grad = ctx.createLinearGradient(startX, startY, startX, startY - coneRange);
-    if (infernoBoost > 0) {
-        grad.addColorStop(0, 'rgba(255, 255, 255, 0.92)');
-        grad.addColorStop(0.35, 'rgba(253, 224, 71, 0.78)');
-        grad.addColorStop(0.75, 'rgba(249, 115, 22, 0.52)');
-        grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
-        ctx.shadowColor = '#f97316';
-        ctx.shadowBlur = 14 + infernoBoost * 4;
-    } else {
-        grad.addColorStop(0, 'rgba(254, 240, 138, 0.75)');
-        grad.addColorStop(0.45, 'rgba(249, 115, 22, 0.50)');
-        grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
-    }
+    grad.addColorStop(0, 'rgba(254, 240, 138, 0.75)');
+    grad.addColorStop(0.45, 'rgba(249, 115, 22, 0.50)');
+    grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
 
     const leftAngle = -Math.PI / 2 - halfSpread;
     const rightAngle = -Math.PI / 2 + halfSpread;
@@ -1597,12 +1719,10 @@ function drawFlameThrowerCone() {
     ctx.closePath();
     ctx.fill();
 
-    // Inti api bagian dalam (lebih tebal & terang jika Inferno aktif)
-    const innerScale = 0.58 + infernoBoost * 0.05;
-    ctx.fillStyle = infernoBoost > 0 ? 'rgba(255, 255, 255, 0.65)' : 'rgba(254, 249, 195, 0.42)';
+    ctx.fillStyle = 'rgba(254, 249, 195, 0.42)';
     ctx.beginPath();
     ctx.moveTo(startX, startY);
-    ctx.arc(startX, startY, (coneRange + flicker) * innerScale, leftAngle * 0.98, rightAngle * 1.02);
+    ctx.arc(startX, startY, (coneRange + flicker) * 0.58, leftAngle * 0.98, rightAngle * 1.02);
     ctx.closePath();
     ctx.fill();
 
@@ -1640,10 +1760,8 @@ function render() {
         ctx.restore();
     }
 
-    // Visual Semburan Flame Thrower (di bawah pesawat)
     drawFlameThrowerCone();
 
-    // Proyektil Pemain
     for (const p of projectiles) {
         if (p.kind === 'shockwave_fan') {
             ctx.save();
@@ -1731,12 +1849,10 @@ function render() {
         }
     }
 
-    // Efek Visual Petir
     for (const bolt of lightningState.visualBolts) {
         drawLightningBolt(bolt.x1, bolt.y1, bolt.x2, bolt.y2, bolt.intensity || 0);
     }
 
-    // Musuh Biasa
     for (const e of enemies) {
         const fallback = e.type === 'heavy' ? '#e11d48' : '#c026d3';
         drawSpriteEntity(e, assets[e.type], e.x, e.y, e.width, e.height, true, fallback);
@@ -1750,7 +1866,6 @@ function render() {
         }
     }
 
-    // Boss
     if (boss) {
         drawSpriteEntity(boss, assets.boss, boss.x, boss.y, boss.width, boss.height, true, '#7e22ce');
 
@@ -1778,7 +1893,6 @@ function render() {
         }
     }
 
-    // Player + Shield Visual
     if (gameState !== 'GAME_OVER') {
         if (player.invulnTimer === 0 || Math.floor(player.invulnTimer / 5) % 2 === 0) {
             ctx.fillStyle = frameCount % 4 < 2 ? '#38bdf8' : '#facc15';
@@ -1804,7 +1918,6 @@ function render() {
         }
     }
 
-    // Peluru Musuh
     for (const b of enemyBullets) {
         ctx.fillStyle = b.color;
         ctx.beginPath();
@@ -1812,7 +1925,6 @@ function render() {
         ctx.fill();
     }
 
-    // Partikel Ledakan
     for (const pt of particles) {
         ctx.fillStyle = pt.color;
         ctx.globalAlpha = Math.max(0, pt.life / 40);
@@ -1820,7 +1932,6 @@ function render() {
     }
     ctx.globalAlpha = 1;
 
-    // Floating Texts
     for (const ft of floatingTexts) {
         ctx.fillStyle = ft.color;
         ctx.font = `bold ${ft.size}px monospace`;
@@ -1828,7 +1939,6 @@ function render() {
         ctx.fillText(ft.text, ft.x, ft.y);
     }
 
-    // Render Virtual Analog Semi-Transparan
     if (isMobileDevice && (gameState === 'WAVE_MINIONS' || gameState === 'BOSS_WARNING' || gameState === 'BOSS_FIGHT')) {
         ctx.save();
         const baseX = joystick.active ? joystick.baseX : canvas.width - 95;
@@ -1876,11 +1986,11 @@ function render() {
     if (playerSkills.shockwave) activeTags.push(`SHK:${playerSkills.shockwave.toUpperCase()}`);
     if (playerSkills.flamethrower) activeTags.push(`FLM:${playerSkills.flamethrower.toUpperCase()}`);
 
-    if (playerFusions.cryoMachine) activeTags.push('CRYO');
-    if (playerFusions.timeStop) activeTags.push('TIME');
-    if (playerFusions.doom) activeTags.push('DOOM');
-    if (playerFusions.inferno) activeTags.push('INFERNO');
-    if (playerFusions.electroDoom) activeTags.push('E-DOOM');
+    if (playerFusions.cryoMachine) activeTags.push('[CRYO]');
+    if (playerFusions.timeStop) activeTags.push('[TIME]');
+    if (playerFusions.doom) activeTags.push('[DOOM]');
+    if (playerFusions.inferno) activeTags.push('[INFERNO]');
+    if (playerFusions.electroDoom) activeTags.push('[E-DOOM]');
 
     ctx.fillStyle = '#94a3b8';
     ctx.font = '9.5px monospace';
@@ -1960,7 +2070,6 @@ function render() {
             const cardY = 230 + idx * 125;
             ctx.save();
 
-            // Kartu minimalis warna netral (termasuk untuk senjata fusion)
             ctx.fillStyle = choice.isFusion ? '#1e293b' : '#0f172a';
             ctx.fillRect(40, cardY, canvas.width - 80, 105);
 
@@ -2063,6 +2172,9 @@ window.GAME_DEV = {
     },
     setFusion: (fKey, active = true) => {
         playerFusions[fKey] = active;
+        if (active) {
+            consumeFusionMaterials(fKey);
+        }
         const name = GAME_CONFIG.fusions[fKey]?.name || fKey;
         spawnFloatingText(player.x, player.y - 45, `Fusion ${name}: ${active ? 'ON' : 'OFF'}`, '#f8fafc', 14);
     },
