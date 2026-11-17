@@ -1,4 +1,4 @@
-// config.js - Pusat Data 4 Senjata, Skill Tree, Evolusi & Balancing
+// config.js - Pusat Data 6 Senjata, Skill Tree, Evolusi & Balancing
 
 const GAME_CONFIG = {
     autoRotateEnemies: true,
@@ -18,7 +18,7 @@ const GAME_CONFIG = {
     },
 
     drops: {
-        heavyHealChance: 0.11 // Dikurangi sedikit (sebelumnya 0.18)
+        heavyHealChance: 0.11
     },
 
     wave: {
@@ -81,7 +81,7 @@ const GAME_CONFIG = {
     },
 
     // ==========================================
-    // DATA SKILL TREE (4 SENJATA LENGKAP)
+    // DATA SKILL TREE (6 SENJATA LENGKAP)
     // ==========================================
     weapons: {
         // 1. LASER GUN
@@ -156,36 +156,35 @@ const GAME_CONFIG = {
             }
         },
 
-        // 3. LIGHTNING CHAIN
+        // 3. LIGHTNING CHAIN (Optimalisasi)
         lightning: {
             id: 'lightning',
             name: 'Lightning Chain',
             color: '#eab308',
             baseAtk: 2,
-            baseCooldown: 12, // 0.2 detik (12 frame pada 60 FPS)
+            baseCooldown: 12, // Fire rate: 0.2 detik (12 frame pada 60 FPS)
             maxRange: 380,
-            chainRadius: 150,
+            chainRadius: 155,
             levels: {
                 1: { desc: 'Otomatis menyambar musuh terdekat tiap 0.2 dtk', atk: 2, chains: 0 },
                 2: { desc: 'DMG +1 (Total 3 ATK)', atk: 3, chains: 0 },
                 3: { desc: 'DMG +2 (Total 5 ATK)', atk: 5, chains: 0 },
-                // Percabangan Evolusi Level 4
                 '4a': {
                     name: 'Lightning: Overload (4A)',
-                    desc: 'DMG ke target yang sama +2 setiap 2 detik',
+                    desc: 'DMG ke target sama +2 tiap 2 dtk (Maks +10/dtk)',
                     atk: 5, chains: 0,
-                    rampIntervalSec: 2.0, rampBonus: 2
+                    rampIntervalSec: 2.0, rampBonus: 2, maxBonusPerSec: 10
                 },
                 '4b': {
                     name: 'Lightning: Arc Storm (4B)',
-                    desc: 'Petir menyambar ke musuh di sekitar target utama',
+                    desc: 'Sambaran menyambar ke musuh di sekitar target utama',
                     atk: 5, chains: 3
                 },
                 '5a': {
                     name: 'Lightning: Overload (5A)',
-                    desc: 'Pertambahan DMG target sama +2/detik (Total +4/dtk)',
+                    desc: 'Pertambahan DMG target sama +2/dtk (Total +4, Maks +10/dtk)',
                     atk: 5, chains: 0,
-                    rampIntervalSec: 1.0, rampBonus: 4
+                    rampIntervalSec: 2.0, rampBonus: 4, maxBonusPerSec: 10
                 },
                 '5b': {
                     name: 'Lightning: Arc Storm (5B)',
@@ -194,9 +193,9 @@ const GAME_CONFIG = {
                 },
                 '6a': {
                     name: 'Lightning: Singularity (MAX)',
-                    desc: 'Pertambahan DMG target sama +2/detik (Total +6/dtk)',
+                    desc: 'Pertambahan DMG target sama +2/dtk (Total +6, Maks +10/dtk)',
                     atk: 5, chains: 0,
-                    rampIntervalSec: 1.0, rampBonus: 6
+                    rampIntervalSec: 2.0, rampBonus: 6, maxBonusPerSec: 10
                 },
                 '6b': {
                     name: 'Lightning: Tempest (MAX)',
@@ -219,7 +218,6 @@ const GAME_CONFIG = {
                 1: { desc: 'Freeze: slow gerak 30% selama 2 dtk (CD 4 dtk)', atk: 5, slow: 0.30 },
                 2: { desc: 'ATK +2, efek slow Freeze +5% (35%)', atk: 7, slow: 0.35 },
                 3: { desc: 'ATK +3, efek slow Freeze +5% (40%)', atk: 10, slow: 0.40 },
-                // Percabangan Evolusi Level 4
                 '4a': {
                     name: 'Arctic: Homing Shard (4A)',
                     desc: 'ATK +4. Tiap 2 dtk tembak es pelacak (150% DMG + Freeze)',
@@ -265,12 +263,11 @@ const GAME_CONFIG = {
             name: 'Shock Wave',
             color: '#c084fc',
             baseAtk: 15,
-            baseCooldown: 60, // 1.0 detik (Fire rate: 1.0)
+            baseCooldown: 60, // 1.0 detik
             levels: {
                 1: { desc: 'Gelombang kipas mendorong musuh (selain boss)', atk: 15, sizeMult: 1.0, knockback: 22, waves: 1 },
                 2: { desc: 'Ukuran gelombang +10%, ATK +3 (18 ATK)', atk: 18, sizeMult: 1.10, knockback: 23, waves: 1 },
                 3: { desc: 'Ukuran gelombang +10%, ATK +3 (21 ATK)', atk: 21, sizeMult: 1.20, knockback: 25, waves: 1 },
-                // Percabangan Evolusi Level 4
                 '4a': {
                     name: 'Shockwave: Vortex (4A)',
                     desc: 'Pusaran acak ke depan menarik musuh ke pusatnya (24 ATK)',
@@ -302,6 +299,69 @@ const GAME_CONFIG = {
                     atk: 35, sizeMult: 1.20, knockback: 30, waves: 3
                 }
             }
+        },
+
+        // 6. FLAME THROWER (Senjata Baru)
+        flamethrower: {
+            id: 'flamethrower',
+            name: 'Flame Thrower',
+            color: '#fb923c',
+            baseAtk: 5,
+            baseRange: 165,
+            baseSpread: 0.42,
+            levels: {
+                1: {
+                    desc: 'Api jarak pendek (2 dtk): Burn 2 dmg/0.5 dtk (2 dtk)',
+                    atk: 5, durationSec: 2.0, cooldownSec: 2.0, rangeMult: 1.0,
+                    burnDmg: 2, burnDurationSec: 2.0
+                },
+                2: {
+                    desc: 'Efek burn meningkat >> 3 dmg/0.5 dtk selama 2 dtk',
+                    atk: 5, durationSec: 2.0, cooldownSec: 2.0, rangeMult: 1.0,
+                    burnDmg: 3, burnDurationSec: 2.0
+                },
+                3: {
+                    desc: 'Durasi burn meningkat >> 3 dmg/0.5 dtk selama 2.5 dtk',
+                    atk: 5, durationSec: 2.0, cooldownSec: 2.0, rangeMult: 1.0,
+                    burnDmg: 3, burnDurationSec: 2.5
+                },
+                '4a': {
+                    name: 'Flame: Pyro Torrent (4A)',
+                    desc: 'Durasi semburan jadi 3.5 dtk, jeda antar semburan 3 dtk',
+                    atk: 5, durationSec: 3.5, cooldownSec: 3.0, rangeMult: 1.0,
+                    burnDmg: 3, burnDurationSec: 2.5
+                },
+                '4b': {
+                    name: 'Flame: Wildfire Jet (4B)',
+                    desc: 'Jangkauan +40% dan jeda serangan berkurang jadi 1.5 dtk',
+                    atk: 5, durationSec: 2.0, cooldownSec: 1.5, rangeMult: 1.4,
+                    burnDmg: 3, burnDurationSec: 2.5
+                },
+                '5a': {
+                    name: 'Flame: Pyro Torrent (5A)',
+                    desc: 'Efek burn meningkat >> 6 dmg/0.5 dtk selama 2.5 dtk',
+                    atk: 5, durationSec: 3.5, cooldownSec: 3.0, rangeMult: 1.0,
+                    burnDmg: 6, burnDurationSec: 2.5
+                },
+                '5b': {
+                    name: 'Flame: Wildfire Jet (5B)',
+                    desc: 'Efek burn meningkat >> 4 dmg/0.5 dtk selama 2.5 dtk',
+                    atk: 5, durationSec: 2.0, cooldownSec: 1.5, rangeMult: 1.4,
+                    burnDmg: 4, burnDurationSec: 2.5
+                },
+                '6a': {
+                    name: 'Flame: Solar Flare (MAX)',
+                    desc: 'Durasi burn meningkat >> 4 dmg/0.5 dtk selama 3 dtk',
+                    atk: 5, durationSec: 3.5, cooldownSec: 3.0, rangeMult: 1.0,
+                    burnDmg: 4, burnDurationSec: 3.0
+                },
+                '6b': {
+                    name: 'Flame: Hellblaze (MAX)',
+                    desc: 'ATK +4 (Total 9 ATK), jangkauan semburan +10% lagi',
+                    atk: 9, durationSec: 2.0, cooldownSec: 1.5, rangeMult: 1.5,
+                    burnDmg: 4, burnDurationSec: 2.5
+                }
+            }
         }
     },
 
@@ -316,8 +376,8 @@ const GAME_CONFIG = {
             req: { laser: '6b', arctic: '6a' },
             reqText: 'Min. Lv.15 + Laser 6B + Arctic Bullet 6A',
             title: 'Cryo Machine',
-            desc: 'Laser berubah jadi Arctic Bullet cepat & Homing Seeker menjadi 2 peluru',
-            color: '#06b6d4'
+            desc: 'Laser berubah jadi Arctic Bullet cepat & Homing Seeker jadi 2 peluru',
+            color: '#cbd5e1'
         },
         timeStop: {
             id: 'timeStop',
@@ -326,8 +386,8 @@ const GAME_CONFIG = {
             req: { he: '6b', arctic: '6a' },
             reqText: 'Min. Lv.15 + HE Cannon 6B + Arctic Bullet 6A',
             title: 'Time Stop',
-            desc: 'Area ledakan HE lebih luas & musuh berhenti total 3 dtk (boss 1.5 dtk, CD 4 dtk)',
-            color: '#3b82f6'
+            desc: 'Area ledakan HE luas & musuh berhenti 3 dtk (boss 1.5 dtk, CD 4 dtk)',
+            color: '#cbd5e1'
         },
         doom: {
             id: 'doom',
@@ -337,7 +397,27 @@ const GAME_CONFIG = {
             reqText: 'Min. Lv.15 + Laser 6A + HE Cannon 6A',
             title: 'Doom',
             desc: 'Tembakan laser digantikan dengan 5 meriam HE Cannon ledakan Hellfire',
-            color: '#ef4444'
+            color: '#cbd5e1'
+        },
+        inferno: {
+            id: 'inferno',
+            name: 'Inferno',
+            minPlayerLevel: 15,
+            req: { lightning: '6a', flamethrower: '6b' },
+            reqText: 'Min. Lv.15 + Lightning 6A + Flame Thrower 6B',
+            title: 'Inferno',
+            desc: 'Petir di target sama terus memicu & menaikkan Burn +3/2dtk (Maks +10/dtk)',
+            color: '#cbd5e1'
+        },
+        electroDoom: {
+            id: 'electroDoom',
+            name: 'Electro Doom',
+            minPlayerLevel: 15,
+            req: { lightning: '6a', he: '6a' },
+            reqText: 'Min. Lv.15 + Lightning 6A + HE Cannon 6A',
+            title: 'Electro Doom',
+            desc: 'Setiap peningkatan DMG Lightning Chain memicu ledakan critical HE Gun',
+            color: '#cbd5e1'
         }
     }
 };

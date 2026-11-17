@@ -1,4 +1,4 @@
-// game.js - Engine Utama dengan 4 Senjata, Evolusi, Homing, Lightning Chain & Shield
+// game.js - Engine Utama dengan 6 Senjata, Evolusi, Fusion Eksklusif & UI Minimalis
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -43,7 +43,7 @@ loadSprite('heavy', GAME_CONFIG.enemies.heavy.sprite);
 loadSprite('boss', GAME_CONFIG.boss.defaultSprite);
 
 // ==========================================
-// 2. STATE GAME, WAVE & 4 SENJATA PLAYER
+// 2. STATE GAME, WAVE & 6 SENJATA PLAYER
 // ==========================================
 let gameState = 'START'; // START, WAVE_MINIONS, BOSS_WARNING, BOSS_FIGHT, SKILL_SELECT, GAME_OVER
 let previousState = 'WAVE_MINIONS';
@@ -64,13 +64,14 @@ let currentExp = 0;
 let expToNextLevel = GAME_CONFIG.leveling.baseExpRequired;
 let pendingLevelUps = 0;
 
-// Level masing-masing dari 5 senjata (null jika belum dibuka)
+// Level masing-masing dari 6 senjata (null jika belum dibuka)
 let playerSkills = {
     laser: '1',
     he: null,
     lightning: null,
     arctic: null,
-    shockwave: null
+    shockwave: null,
+    flamethrower: null
 };
 
 let weaponTimers = {
@@ -80,21 +81,28 @@ let weaponTimers = {
     arctic: 0,
     arcticSeeker: 0,
     arcticShield: 0,
-    shockwave: 0
+    shockwave: 0,
+    flameCooldown: 0,
+    flameActive: 0,
+    flameTick: 0
 };
 
-// Status 3 Senjata Fusion (aktif jika true)
+// Status 5 Senjata Fusion (aktif jika true)
 let playerFusions = {
     cryoMachine: false, // Laser 6B + Arctic 6A
     timeStop: false,    // HE 6B + Arctic 6A
-    doom: false         // Laser 6A + HE 6A
+    doom: false,        // Laser 6A + HE 6A
+    inferno: false,     // Lightning 6A + Flame Thrower 6B
+    electroDoom: false  // Lightning 6A + HE 6A
 };
 
-// State khusus Lightning Overload (Cabang A) & visual petir
+// State khusus Lightning Overload (Cabang A), Inferno & visual petir
 let lightningState = {
     lockedTarget: null,
     lockFrames: 0,
-    visualBolts: [] // Menyimpan garis petir sementara untuk digambar di canvas
+    lastStackCount: 0,
+    currentIntensity: 0, // Menyimpan tingkat ketebalan & kecerahan untuk visual Inferno
+    visualBolts: []
 };
 
 let skillChoices = [];
@@ -108,7 +116,7 @@ const player = {
     height: GAME_CONFIG.player.height,
     speed: pSpeed,
     hp: GAME_CONFIG.player.maxHp,
-    hasShield: false, // Shield dari Arctic Bullet cabang B
+    hasShield: false,
     invulnTimer: 0
 };
 
@@ -132,37 +140,41 @@ for (let i = 0; i < 70; i++) {
 }
 
 // ==========================================
-// 3. SISTEM EXP & SKILL TREE (4 SENJATA)
+// 3. SISTEM EXP & SKILL TREE (DENGAN PEMBATAS FUSION EKSKLUSIF)
 // ==========================================
-function addExp(amount) {
-    currentExp += amount;
-    while (currentExp >= expToNextLevel) {
-        currentExp -= expToNextLevel;
-        playerLevel++;
-        expToNextLevel = GAME_CONFIG.leveling.baseExpRequired + (playerLevel - 1) * GAME_CONFIG.leveling.expIncrementPerLvl;
-        pendingLevelUps++;
-        // Immune 1 detik (60 frame) saat naik level
-        player.invulnTimer = 60;
+function getUsedFusionWeapons() {
+    const used = new Set();
+    if (!GAME_CONFIG.fusions) return used;
+    for (const fKey in playerFusions) {
+        if (playerFusions[fKey] && GAME_CONFIG.fusions[fKey]) {
+            for (const wKey in GAME_CONFIG.fusions[fKey].req) {
+                used.add(wKey);
+            }
+        }
     }
-
-    if (pendingLevelUps > 0 && gameState !== 'SKILL_SELECT' && gameState !== 'GAME_OVER') {
-        triggerSkillSelection();
-    }
+    return used;
 }
 
 function getAvailableSkillUpgrades() {
     const pool = [];
-    const weaponKeys = ['laser', 'he', 'lightning', 'arctic', 'shockwave'];
+    const weaponKeys = ['laser', 'he', 'lightning', 'arctic', 'shockwave', 'flamethrower'];
 
     // 1. Cek Senjata Fusion:
-    // Syarat: kedua senjata harus MAX & player minimal level 15
+    // Syarat: kedua senjata MAX, player min. level 15, DAN belum ada satupun senjata yang dipakai di fusion lain
+    const usedFusionWeapons = getUsedFusionWeapons();
     const fusionCards = [];
+
     if (GAME_CONFIG.fusions && playerLevel >= 15) {
         for (const fKey in GAME_CONFIG.fusions) {
             const fData = GAME_CONFIG.fusions[fKey];
             if (!playerFusions[fKey]) {
                 let eligible = true;
                 for (const rW in fData.req) {
+                    // Pembatas: jika salah satu senjata sudah dipakai dalam fusion aktif, jangan munculkan lagi
+                    if (usedFusionWeapons.has(rW)) {
+                        eligible = false;
+                        break;
+                    }
                     if (playerSkills[rW] !== fData.req[rW]) {
                         eligible = false;
                         break;
@@ -172,10 +184,9 @@ function getAvailableSkillUpgrades() {
                     fusionCards.push({
                         isFusion: true,
                         fusionKey: fKey,
-                        title: `★ FUSION: ${fData.name}`,
+                        title: `FUSION: ${fData.name}`,
                         desc: fData.desc,
-                        reqText: fData.reqText,
-                        color: fData.color
+                        reqText: fData.reqText
                     });
                 }
             }
@@ -193,8 +204,7 @@ function getAvailableSkillUpgrades() {
                 weapon: wKey,
                 nextLvl: '1',
                 title: `Unlock: ${wCfg.name}`,
-                desc: wCfg.levels['1'].desc,
-                color: wCfg.color
+                desc: wCfg.levels['1'].desc
             });
         } else if (curLvl === '1' || curLvl === '2') {
             const next = String(Number(curLvl) + 1);
@@ -202,17 +212,14 @@ function getAvailableSkillUpgrades() {
                 weapon: wKey,
                 nextLvl: next,
                 title: `${wCfg.name} Lv.${next}`,
-                desc: wCfg.levels[next].desc,
-                color: wCfg.color
+                desc: wCfg.levels[next].desc
             });
         } else if (curLvl === '3') {
-            // Percabangan Evolusi Level 4
             pool.push({
                 weapon: wKey,
                 nextLvl: '4a',
                 title: wCfg.levels['4a'].name,
                 desc: wCfg.levels['4a'].desc,
-                color: wCfg.color,
                 isEvo: true
             });
             pool.push({
@@ -220,7 +227,6 @@ function getAvailableSkillUpgrades() {
                 nextLvl: '4b',
                 title: wCfg.levels['4b'].name,
                 desc: wCfg.levels['4b'].desc,
-                color: wCfg.color,
                 isEvo: true
             });
         } else if (curLvl === '4a' || curLvl === '5a') {
@@ -229,8 +235,7 @@ function getAvailableSkillUpgrades() {
                 weapon: wKey,
                 nextLvl: next,
                 title: wCfg.levels[next].name,
-                desc: wCfg.levels[next].desc,
-                color: wCfg.color
+                desc: wCfg.levels[next].desc
             });
         } else if (curLvl === '4b' || curLvl === '5b') {
             const next = curLvl === '4b' ? '5b' : '6b';
@@ -238,23 +243,35 @@ function getAvailableSkillUpgrades() {
                 weapon: wKey,
                 nextLvl: next,
                 title: wCfg.levels[next].name,
-                desc: wCfg.levels[next].desc,
-                color: wCfg.color
+                desc: wCfg.levels[next].desc
             });
         }
     }
 
-    // Prioritaskan kartu Fusion di posisi paling utama (paling atas)
     const shuffledNormal = pool.sort(() => Math.random() - 0.5);
     const combined = [...fusionCards, ...shuffledNormal];
 
     if (combined.length === 0) {
-        combined.push({ weapon: 'heal', nextLvl: null, title: 'Emergency Repair', desc: 'Pulihkan +2 HP Pesawat', color: '#22c55e' });
-        combined.push({ weapon: 'bonus', nextLvl: null, title: 'Overcharge Core', desc: '+1000 Bonus Score', color: '#facc15' });
+        combined.push({ weapon: 'heal', nextLvl: null, title: 'Emergency Repair', desc: 'Pulihkan +2 HP Pesawat' });
+        combined.push({ weapon: 'bonus', nextLvl: null, title: 'Overcharge Core', desc: '+1000 Bonus Score' });
     }
 
-    // Tampilkan hingga 3 kartu pilihan
     return combined.slice(0, 3);
+}
+
+function addExp(amount) {
+    currentExp += amount;
+    while (currentExp >= expToNextLevel) {
+        currentExp -= expToNextLevel;
+        playerLevel++;
+        expToNextLevel = GAME_CONFIG.leveling.baseExpRequired + (playerLevel - 1) * GAME_CONFIG.leveling.expIncrementPerLvl;
+        pendingLevelUps++;
+        player.invulnTimer = 60;
+    }
+
+    if (pendingLevelUps > 0 && gameState !== 'SKILL_SELECT' && gameState !== 'GAME_OVER') {
+        triggerSkillSelection();
+    }
 }
 
 function triggerSkillSelection() {
@@ -267,26 +284,29 @@ function triggerSkillSelection() {
 function applySkillChoice(choice) {
     if (choice.isFusion) {
         playerFusions[choice.fusionKey] = true;
-        spawnFloatingText(player.x, player.y - 45, `FUSION: ${choice.title.replace('★ FUSION: ', '')}!`, choice.color, 16);
-        createExplosion(player.x, player.y, [choice.color, '#ffffff', '#facc15'], 36);
-        screenShake = 16;
+        const cleanTitle = choice.title.replace('FUSION: ', '');
+        spawnFloatingText(player.x, player.y - 45, `FUSION: ${cleanTitle}!`, '#f8fafc', 16);
+        createExplosion(player.x, player.y, ['#e2e8f0', '#ffffff', '#94a3b8'], 32);
+        screenShake = 14;
     } else if (choice.weapon === 'heal') {
         player.hp = Math.min(GAME_CONFIG.player.maxHp, player.hp + 2);
     } else if (choice.weapon === 'bonus') {
         score += 1000;
     } else {
         playerSkills[choice.weapon] = choice.nextLvl;
-        // Langsung aktifkan Shield pertama kali saat pemain memilih Arctic 4B
         if (choice.weapon === 'arctic' && choice.nextLvl === '4b') {
             player.hasShield = true;
             weaponTimers.arcticShield = Math.round(GAME_CONFIG.weapons.arctic.levels['4b'].shieldIntervalSec * 60);
+        }
+        if (choice.weapon === 'flamethrower' && choice.nextLvl === '1') {
+            weaponTimers.flameCooldown = 0;
+            weaponTimers.flameActive = 0;
         }
     }
 
     if (pendingLevelUps > 0) {
         triggerSkillSelection();
     } else {
-        // Berikan immune 1 detik saat pemain kembali dari menu skill
         player.invulnTimer = Math.max(player.invulnTimer, 60);
         gameState = previousState;
     }
@@ -361,7 +381,6 @@ function resetJoystick() {
     joystick.dy = 0;
 }
 
-// Keyboard (PC)
 window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if ((e.code === 'Space' || e.code === 'Enter') && (gameState === 'START' || gameState === 'GAME_OVER')) {
@@ -375,7 +394,6 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
-// Mouse (PC)
 canvas.addEventListener('mousedown', (e) => {
     const pos = toCanvasXY(e.clientX, e.clientY);
     if (handleMenuAction(pos.x, pos.y)) return;
@@ -401,7 +419,6 @@ window.addEventListener('mouseup', () => {
     if (joystick.touchId === 'mouse') resetJoystick();
 });
 
-// Touch (HP / Mobile)
 canvas.addEventListener('touchstart', (e) => {
     if (e.cancelable) e.preventDefault();
     const touch = e.changedTouches[0];
@@ -448,7 +465,7 @@ window.addEventListener('touchend', (e) => {
 window.addEventListener('touchcancel', resetJoystick);
 
 // ==========================================
-// 5. SETUP WAVE & LOGIKA PENEMBAKAN 4 SENJATA
+// 5. SETUP WAVE & LOGIKA PENEMBAKAN 6 SENJATA
 // ==========================================
 function setupWave(waveNum) {
     wave = waveNum;
@@ -468,10 +485,21 @@ function startGame() {
     expToNextLevel = GAME_CONFIG.leveling.baseExpRequired;
     pendingLevelUps = 0;
 
-    playerSkills = { laser: '1', he: null, lightning: null, arctic: null, shockwave: null };
-    weaponTimers = { laser: 0, he: 0, lightning: 0, arctic: 0, arcticSeeker: 0, arcticShield: 0, shockwave: 0 };
-    playerFusions = { cryoMachine: false, timeStop: false, doom: false };
-    lightningState = { lockedTarget: null, lockFrames: 0, visualBolts: [] };
+    playerSkills = { laser: '1', he: null, lightning: null, arctic: null, shockwave: null, flamethrower: null };
+    weaponTimers = {
+        laser: 0,
+        he: 0,
+        lightning: 0,
+        arctic: 0,
+        arcticSeeker: 0,
+        arcticShield: 0,
+        shockwave: 0,
+        flameCooldown: 0,
+        flameActive: 0,
+        flameTick: 0
+    };
+    playerFusions = { cryoMachine: false, timeStop: false, doom: false, inferno: false, electroDoom: false };
+    lightningState = { lockedTarget: null, lockFrames: 0, lastStackCount: 0, currentIntensity: 0, visualBolts: [] };
 
     player.x = canvas.width / 2;
     player.y = canvas.height - 100;
@@ -517,8 +545,6 @@ function fireActiveWeapons() {
         const wCfg = GAME_CONFIG.weapons.laser;
         const lvlData = wCfg.levels[playerSkills.laser];
 
-        // FUSION 3: DOOM (Laser 6A + HE Cannon 6A)
-        // Sekarang laser yang ditembakkan digantikan dengan HE Gun Nova Fan (5 meriam HE bercabang)
         if (playerFusions.doom) {
             const heCfg = GAME_CONFIG.weapons.he;
             const heLvl = heCfg.levels['6a'];
@@ -542,10 +568,7 @@ function fireActiveWeapons() {
                 });
             }
             weaponTimers.laser = Math.max(1, Math.round(wCfg.baseCooldown / lvlData.shotsPerSec));
-        }
-        // FUSION 1: CRYO MACHINE (Laser 6B + Arctic Bullet 6A)
-        // Laser yang ditembakkan berubah menjadi Arctic Bullet beruntun cepat
-        else if (playerFusions.cryoMachine) {
+        } else if (playerFusions.cryoMachine) {
             const branches = lvlData.branches;
             const spread = lvlData.spread;
             const speed = lvlData.speed;
@@ -575,9 +598,7 @@ function fireActiveWeapons() {
                 });
             }
             weaponTimers.laser = Math.max(1, Math.round(wCfg.baseCooldown / lvlData.shotsPerSec));
-        }
-        // Laser Normal
-        else {
+        } else {
             const branches = lvlData.branches;
             const spread = lvlData.spread;
             const speed = lvlData.speed;
@@ -622,7 +643,7 @@ function fireActiveWeapons() {
         weaponTimers.he = wCfg.baseCooldown;
     }
 
-    // 3. LIGHTNING CHAIN (Otomatis menyambar musuh terdekat setiap 0.2 detik)
+    // 3. LIGHTNING CHAIN (Optimalisasi + Fusion: Inferno & Electro Doom)
     if (playerSkills.lightning && weaponTimers.lightning <= 0) {
         const wCfg = GAME_CONFIG.weapons.lightning;
         const lvlData = wCfg.levels[playerSkills.lightning];
@@ -630,25 +651,73 @@ function fireActiveWeapons() {
 
         if (primary) {
             let finalAtk = lvlData.atk;
+            let currentStacks = 0;
 
-            // Evolusi Cabang A: Overload (DMG meningkat jika terus menyambar target yang sama)
+            // Evolusi Cabang A: Overload (DMG target sama meningkat tiap 2 dtk, max +10/dtk)
             if (lvlData.rampIntervalSec) {
                 if (lightningState.lockedTarget === primary) {
                     lightningState.lockFrames += wCfg.baseCooldown;
-                    const stacks = Math.floor(lightningState.lockFrames / (lvlData.rampIntervalSec * 60));
-                    finalAtk += stacks * lvlData.rampBonus;
+                    currentStacks = Math.floor(lightningState.lockFrames / (lvlData.rampIntervalSec * 60));
+
+                    const lockSeconds = Math.max(1, lightningState.lockFrames / 60);
+                    const maxTotalBonus = (lvlData.maxBonusPerSec || 10) * lockSeconds;
+                    const bonusDmg = Math.min(maxTotalBonus, currentStacks * lvlData.rampBonus);
+                    finalAtk += bonusDmg;
+
+                    // Cek jika baru saja terjadi peningkatan damage (stack baru terpicu)
+                    if (currentStacks > lightningState.lastStackCount) {
+                        lightningState.lastStackCount = currentStacks;
+
+                        // FUSION 5: ELECTRO DOOM (Lightning 6A + HE Gun 6A)
+                        // Saat peningkatan dmg lightning chain terpicu, menyebabkan ledakan critical HE gun
+                        if (playerFusions.electroDoom) {
+                            const heCfg = GAME_CONFIG.weapons.he;
+                            const heLvl = heCfg.levels['6a'];
+                            triggerHeExplosion({
+                                x: primary.x,
+                                y: primary.y,
+                                atk: heCfg.baseAtk,
+                                radius: heCfg.explosionRadius * 1.15,
+                                lvlData: heLvl,
+                                forceCrit: true,
+                                isElectroDoom: true
+                            }, primary);
+                            spawnFloatingText(primary.x, primary.y - 36, 'ELECTRO DOOM!', '#fde047', 14);
+                        }
+                    }
                 } else {
                     lightningState.lockedTarget = primary;
                     lightningState.lockFrames = 0;
+                    lightningState.lastStackCount = 0;
+                    currentStacks = 0;
                 }
             }
 
-            applyDamageToTarget(primary, finalAtk, '#fde047', false);
+            lightningState.currentIntensity = currentStacks;
+
+            // FUSION 4: INFERNO (Lightning 6A + Flame Thrower 6B)
+            // Saat lightning chain menyerang target yang sama, efek burn terus diterapkan & meningkat +3 dmg/2dtk (maks +10/dtk)
+            if (playerFusions.inferno) {
+                if (!primary.status) updateStatusEffects(primary);
+                const ftCfg = GAME_CONFIG.weapons.flamethrower;
+                const ftLvl = ftCfg.levels['6b'];
+                const baseBurn = ftLvl.burnDmg; // 4 dmg per 0.5 dtk
+                const lockSec = Math.max(1, lightningState.lockFrames / 60);
+                // Maks +10/dtk = +5 per 0.5 dtk tick
+                const maxBurnBonus = 5 * lockSec;
+                const infernoBonus = Math.min(maxBurnBonus, currentStacks * 3);
+
+                applyBurnToTarget(primary, baseBurn + infernoBonus, ftLvl.burnDurationSec);
+                createExplosion(primary.x, primary.y, ['#f97316', '#facc15', '#ffffff'], 4 + Math.min(8, currentStacks * 2));
+            }
+
+            applyDamageToTarget(primary, finalAtk, playerFusions.inferno ? '#fb923c' : '#fde047', false);
             createExplosion(primary.x, primary.y, ['#eab308', '#fef08a'], 4);
             lightningState.visualBolts.push({
                 x1: player.x, y1: player.y - 24,
                 x2: primary.x, y2: primary.y,
-                life: 6
+                life: 6,
+                intensity: playerFusions.inferno ? currentStacks : 0
             });
 
             // Evolusi Cabang B: Arc Storm (Menyambar musuh di sekitar target utama)
@@ -664,7 +733,8 @@ function fireActiveWeapons() {
                     lightningState.visualBolts.push({
                         x1: lastNode.x, y1: lastNode.y,
                         x2: nextNode.x, y2: nextNode.y,
-                        life: 6
+                        life: 6,
+                        intensity: 0
                     });
                     lastNode = nextNode;
                 }
@@ -674,15 +744,16 @@ function fireActiveWeapons() {
         } else {
             lightningState.lockedTarget = null;
             lightningState.lockFrames = 0;
+            lightningState.lastStackCount = 0;
+            lightningState.currentIntensity = 0;
         }
     }
 
-    // 4. ARCTIC BULLET (Peluru Es Utama + Cabang A Homing Seeker + Cabang B Shield + Cryo Machine 2 Seeker)
+    // 4. ARCTIC BULLET
     if (playerSkills.arctic) {
         const wCfg = GAME_CONFIG.weapons.arctic;
         const lvlData = wCfg.levels[playerSkills.arctic];
 
-        // Peluru es lurus setiap 1.0 detik
         if (weaponTimers.arctic <= 0) {
             projectiles.push({
                 kind: 'arctic',
@@ -699,7 +770,6 @@ function fireActiveWeapons() {
             weaponTimers.arctic = wCfg.baseCooldown;
         }
 
-        // Cabang A: Homing Ice Shard (Fusion Cryo Machine: bertambah menjadi 2 projectile pelacak)
         if (lvlData.seekerIntervalSec && weaponTimers.arcticSeeker <= 0) {
             const seekerCount = playerFusions.cryoMachine ? 2 : 1;
             const allTargets = getAllActiveTargets().sort((a, b) =>
@@ -732,7 +802,6 @@ function fireActiveWeapons() {
             weaponTimers.arcticSeeker = Math.round(lvlData.seekerIntervalSec * 60);
         }
 
-        // Cabang B: Regenerasi Shield setiap 60 / 50 detik (tidak menumpuk, me-refresh)
         if (lvlData.shieldIntervalSec) {
             if (weaponTimers.arcticShield <= 0) {
                 player.hasShield = true;
@@ -743,13 +812,12 @@ function fireActiveWeapons() {
         }
     }
 
-    // 5. SHOCK WAVE (Kipas dorong musuh atau Pusaran tarik musuh ke pusat)
+    // 5. SHOCK WAVE
     if (playerSkills.shockwave && weaponTimers.shockwave <= 0) {
         const swCfg = GAME_CONFIG.weapons.shockwave;
         const swLvl = swCfg.levels[playerSkills.shockwave];
 
         if (swLvl.isVortex) {
-            // Evolusi Cabang A: Pusaran acak menerjang ke depan & menarik musuh
             const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.72;
             const speed = 4.2;
             projectiles.push({
@@ -770,7 +838,6 @@ function fireActiveWeapons() {
             });
             createExplosion(player.x, player.y - 20, ['#c084fc', '#d8b4fe'], 6);
         } else {
-            // Gelombang Kipas (Level 1-3: 1 gelombang, Level 4B & 5B: 2 gelombang, Level 6B: 3 gelombang)
             const waveCount = swLvl.waves || 1;
             const spreadAngles = waveCount === 1 ? [0] : (waveCount === 2 ? [-0.15, 0.15] : [-0.25, 0, 0.25]);
 
@@ -796,10 +863,52 @@ function fireActiveWeapons() {
         }
         weaponTimers.shockwave = swCfg.baseCooldown;
     }
+
+    // 6. FLAME THROWER (Senjata Baru: Semburan api jarak pendek berdurasi & berjeda)
+    if (playerSkills.flamethrower) {
+        const ftCfg = GAME_CONFIG.weapons.flamethrower;
+        const ftLvl = ftCfg.levels[playerSkills.flamethrower];
+
+        if (weaponTimers.flameActive > 0) {
+            weaponTimers.flameActive--;
+            weaponTimers.flameTick++;
+
+            const coneRange = ftCfg.baseRange * ftLvl.rangeMult;
+            const halfSpread = ftCfg.baseSpread;
+
+            // Berikan damage semburan & efek burn setiap 0.25 detik (15 frame) selama semburan menyentuh musuh
+            if (weaponTimers.flameTick % 15 === 0) {
+                for (const t of getAllActiveTargets()) {
+                    const dx = t.x - player.x;
+                    const dy = t.y - (player.y - 28);
+                    const dist = Math.hypot(dx, dy);
+
+                    if (dy < 10 && dist <= coneRange + t.width * 0.35) {
+                        const angleFromUp = Math.abs(Math.atan2(dx, -dy));
+                        if (angleFromUp <= halfSpread) {
+                            applyDamageToTarget(t, ftLvl.atk, '#fb923c', false);
+                            applyBurnToTarget(t, ftLvl.burnDmg, ftLvl.burnDurationSec);
+                        }
+                    }
+                }
+            }
+
+            if (weaponTimers.flameActive <= 0) {
+                weaponTimers.flameCooldown = Math.round(ftLvl.cooldownSec * 60);
+            }
+        } else {
+            if (weaponTimers.flameCooldown > 0) {
+                weaponTimers.flameCooldown--;
+            } else {
+                weaponTimers.flameActive = Math.round(ftLvl.durationSec * 60);
+                weaponTimers.flameTick = 0;
+            }
+        }
+    }
 }
 
 // ==========================================
-// 6. EFEK STATUS (FREEZE, BURN, SHATTER)
+// 6. EFEK STATUS (FREEZE, BURN 0.5s, SHATTER)
 // ==========================================
 function spawnFloatingText(x, y, text, color = '#ffffff', size = 13) {
     floatingTexts.push({
@@ -813,7 +922,6 @@ function spawnFloatingText(x, y, text, color = '#ffffff', size = 13) {
 }
 
 function applyDamageToTarget(target, amount, color = '#ffffff', isCrit = false) {
-    // Boss kebal terhadap semua damage selama 3 detik awal (animasi masuk)
     if (target === boss && boss && boss.introTimer > 0) {
         target.hitFlash = 3;
         spawnFloatingText(target.x, target.y - 20, 'IMMUNE', '#facc15', 13);
@@ -825,6 +933,13 @@ function applyDamageToTarget(target, amount, color = '#ffffff', isCrit = false) 
     target.hitFlash = 4;
     const label = isCrit ? `${Math.round(amount)}!` : `${Math.round(amount)}`;
     spawnFloatingText(target.x, target.y - 15, label, color, isCrit ? 16 : 12);
+}
+
+function applyBurnToTarget(target, dmgPerHalfSec, durationSec) {
+    if (target === boss && boss && boss.introTimer > 0) return;
+    if (!target.status) updateStatusEffects(target);
+    target.status.burnHalfSecDmg = Math.max(target.status.burnHalfSecDmg || 0, dmgPerHalfSec);
+    target.status.burnTimer = Math.max(target.status.burnTimer || 0, Math.round(durationSec * 60));
 }
 
 function applyFreezeToTarget(target, slowAmount, durationSec, cdSec) {
@@ -843,7 +958,7 @@ function updateStatusEffects(target) {
         target.status = {
             burnTimer: 0,
             burnTickTimer: 0,
-            burnDps: 0,
+            burnHalfSecDmg: 0,
             freezeTimer: 0,
             freezeAccumulated: 0,
             freezeCdTimer: 0,
@@ -860,13 +975,17 @@ function updateStatusEffects(target) {
     if (st.timeStopCdTimer > 0) st.timeStopCdTimer--;
     if (st.timeStopTimer > 0) st.timeStopTimer--;
 
+    // Efek Burn: tick setiap 0.5 detik (30 frame)
     if (st.burnTimer > 0) {
         st.burnTimer--;
         st.burnTickTimer++;
-        if (st.burnTickTimer >= 60) {
+        if (st.burnTickTimer >= 30) {
             st.burnTickTimer = 0;
-            applyDamageToTarget(target, st.burnDps, '#fb923c', false);
-            createExplosion(target.x, target.y, ['#f97316', '#facc15'], 6);
+            applyDamageToTarget(target, st.burnHalfSecDmg, '#fb923c', false);
+            createExplosion(target.x, target.y, ['#f97316', '#facc15'], 5);
+        }
+        if (st.burnTimer <= 0) {
+            st.burnHalfSecDmg = 0;
         }
     }
 
@@ -874,7 +993,6 @@ function updateStatusEffects(target) {
         st.freezeTimer--;
         st.freezeAccumulated += 1 / 60;
 
-        // Sinergi HE Cannon 6B: jika musuh beku > 4 detik (termasuk dari Arctic Bullet)
         const heLvl = playerSkills.he;
         if (heLvl === '6b' && st.freezeAccumulated > 4.0 && st.shatterCdTimer <= 0) {
             const trueDmg = GAME_CONFIG.weapons.he.baseAtk * GAME_CONFIG.weapons.he.levels['6b'].shatterTrueDmgPct;
@@ -897,7 +1015,10 @@ function triggerHeExplosion(proj, directTarget) {
     const isTimeStop = playerFusions.timeStop;
     const blastRadius = isTimeStop ? proj.radius * 1.55 : proj.radius;
 
-    if (proj.isDoom) {
+    if (proj.isElectroDoom) {
+        createExplosion(proj.x, proj.y, ['#fde047', '#f97316', '#ffffff'], 26);
+        screenShake = Math.max(screenShake, 6);
+    } else if (proj.isDoom) {
         createExplosion(proj.x, proj.y, ['#ef4444', '#f97316', '#facc15', '#ffffff'], 28);
         screenShake = Math.max(screenShake, 7);
     } else if (isTimeStop) {
@@ -913,14 +1034,12 @@ function triggerHeExplosion(proj, directTarget) {
         const hitRange = blastRadius + (target.width * 0.35);
 
         if (target === directTarget || dist <= hitRange) {
-            const isCrit = Math.random() < lvl.critRate;
+            const isCrit = proj.forceCrit ? true : (Math.random() < lvl.critRate);
             const finalDmg = isCrit ? proj.atk * lvl.critDmg : proj.atk;
             applyDamageToTarget(target, finalDmg, isCrit ? '#facc15' : '#fdba74', isCrit);
 
             if (!target.status) updateStatusEffects(target);
 
-            // FUSION 2: TIME STOP (HE 6B + Arctic 6A)
-            // Ledakan berarea luas menghentikan musuh 3 detik (boss 1.5 detik), CD 4 detik
             if (isTimeStop && target.status.timeStopCdTimer <= 0) {
                 const isBoss = (target === boss);
                 const durationSec = isBoss ? 1.5 : 3.0;
@@ -930,8 +1049,8 @@ function triggerHeExplosion(proj, directTarget) {
             }
 
             if (lvl.burnPct) {
-                target.status.burnDps = proj.atk * lvl.burnPct;
-                target.status.burnTimer = Math.round(lvl.burnDuration * 60);
+                // Konversi burnPct/dtk ke burn per 0.5 detik
+                applyBurnToTarget(target, (proj.atk * lvl.burnPct) * 0.5, lvl.burnDuration);
             }
 
             if (lvl.freezeSlow) {
@@ -984,11 +1103,11 @@ function spawnBoss() {
         vx: bCfg.baseSpeedX + (wave - 1) * bCfg.speedIncrementPerWave,
         hp: totalHp,
         maxHp: totalHp,
-        attackTimer: 180, // Mulai serang setelah animasi masuk 3 detik
+        attackTimer: 180,
         patternIndex: 0,
         hitFlash: 0,
         status: null,
-        introTimer: 180 // Immune terhadap semua damage pada 3 detik awal (180 frame)
+        introTimer: 180
     };
 }
 
@@ -1010,10 +1129,9 @@ function createExplosion(x, y, colors, count = 16) {
 function damagePlayer() {
     if (player.godMode || player.invulnTimer > 0) return;
 
-    // Cek Shield dari Arctic Bullet Cabang B terlebih dahulu
     if (player.hasShield) {
         player.hasShield = false;
-        player.invulnTimer = 60; // 1.0 detik immune
+        player.invulnTimer = 60;
         screenShake = 6;
         spawnFloatingText(player.x, player.y - 30, 'BLOCKED!', '#67e8f9', 14);
         createExplosion(player.x, player.y, ['#67e8f9', '#ffffff'], 22);
@@ -1021,7 +1139,7 @@ function damagePlayer() {
     }
 
     player.hp--;
-    player.invulnTimer = 60; // 1.0 detik immune terhadap semua damage
+    player.invulnTimer = 60;
     screenShake = 12;
     createExplosion(player.x, player.y, ['#38bdf8', '#facc15', '#ffffff'], 20);
     if (player.hp <= 0) {
@@ -1056,7 +1174,6 @@ function update() {
         if (s.y > canvas.height) { s.y = 0; s.x = Math.random() * canvas.width; }
     }
 
-    // Kurangi umur visual petir
     for (let i = lightningState.visualBolts.length - 1; i >= 0; i--) {
         lightningState.visualBolts[i].life--;
         if (lightningState.visualBolts[i].life <= 0) lightningState.visualBolts.splice(i, 1);
@@ -1064,13 +1181,11 @@ function update() {
 
     if (gameState === 'START' || gameState === 'GAME_OVER' || gameState === 'SKILL_SELECT') return;
 
-    // Gerak Keyboard (PC)
     if (keys['ArrowLeft'] || keys['KeyA']) player.x -= pSpeed;
     if (keys['ArrowRight'] || keys['KeyD']) player.x += pSpeed;
     if (keys['ArrowUp'] || keys['KeyW']) player.y -= pSpeed;
     if (keys['ArrowDown'] || keys['KeyS']) player.y += pSpeed;
 
-    // Gerak Virtual Analog (Mobile)
     if (joystick.active) {
         player.x += joystick.dx * pSpeed;
         player.y += joystick.dy * pSpeed;
@@ -1090,7 +1205,6 @@ function update() {
 
     fireActiveWeapons();
 
-    // Progresi Wave
     if (gameState === 'WAVE_MINIONS') {
         waveTimerFrames--;
         if (
@@ -1115,7 +1229,6 @@ function update() {
         }
     }
 
-    // Update Proyektil (termasuk homing Arctic Seeker & Shockwave)
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
 
@@ -1128,10 +1241,8 @@ function update() {
             p.spinAngle += 0.22;
             p.damageTimer++;
 
-            // Pantul di batas kiri/kanan kanvas
             if (p.x < 30 || p.x > canvas.width - 30) p.vx *= -1;
 
-            // Efek hisapan (Pull) terhadap semua musuh selain boss
             for (const t of getAllActiveTargets()) {
                 if (t !== boss) {
                     const dx = p.x - t.x;
@@ -1145,7 +1256,6 @@ function update() {
                 }
             }
 
-            // Damage berkala setiap 14 frame untuk musuh di dalam pusaran
             if (p.damageTimer % 14 === 0) {
                 for (const t of getAllActiveTargets()) {
                     const dist = Math.hypot(t.x - p.x, t.y - p.y);
@@ -1164,7 +1274,6 @@ function update() {
         } else if (p.kind === 'shockwave_fan') {
             p.life--;
 
-            // Cek tabrakan menembus musuh (Piercing Fan Wave)
             for (const t of getAllActiveTargets()) {
                 const dist = Math.hypot(t.x - p.x, t.y - p.y);
                 const hitRange = (p.arcWidth * 0.55) + (t.width * 0.35);
@@ -1174,7 +1283,6 @@ function update() {
                     applyDamageToTarget(t, p.atk, '#c084fc', false);
                     createExplosion(t.x, t.y, ['#c084fc', '#e879f9', '#ffffff'], 6);
 
-                    // Mendorong musuh biasa (selain boss)
                     if (t !== boss) {
                         t.y = Math.max(-20, t.y - p.knockback);
                         t.vy = Math.max(0.4, t.vy * 0.6);
@@ -1196,14 +1304,12 @@ function update() {
         }
     }
 
-    // Update Musuh Biasa
     for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
         updateStatusEffects(e);
 
         const isTimeStopped = (e.status && e.status.timeStopTimer > 0);
         if (isTimeStopped) {
-            // TIME STOP: Musuh berhenti bergerak dan tidak menembak
             if (e.hitFlash > 0) e.hitFlash--;
         } else {
             const speedMult = 1 - (e.status.slowFactor || 0);
@@ -1229,7 +1335,6 @@ function update() {
         const hitH = e.height * 0.38;
         for (let j = projectiles.length - 1; j >= 0; j--) {
             const p = projectiles[j];
-            // Gelombang kipas & pusaran menembus musuh, tidak hancur saat menabrak
             if (p.kind === 'shockwave_fan' || p.kind === 'shockwave_vortex') continue;
 
             if (Math.abs(p.x - e.x) < hitW && Math.abs(p.y - e.y) < hitH) {
@@ -1261,7 +1366,6 @@ function update() {
         if (e.y > canvas.height + 50) enemies.splice(i, 1);
     }
 
-    // Update Boss
     if (gameState === 'BOSS_FIGHT' && boss) {
         updateStatusEffects(boss);
         const bCfg = GAME_CONFIG.boss;
@@ -1270,7 +1374,6 @@ function update() {
         const isBossTimeStopped = (boss.status && boss.status.timeStopTimer > 0);
 
         if (isBossTimeStopped) {
-            // Boss berhenti total selama Time Stop
             if (boss.hitFlash > 0) boss.hitFlash--;
         } else {
             const bSpeedMult = 1 - (boss.status.slowFactor || 0);
@@ -1322,7 +1425,6 @@ function update() {
         const bHitW = boss.width * 0.4;
         const bHitH = boss.height * 0.35;
 
-        // Tabrakan fisik Player menabrak Boss (player terkena hit)
         if (boss && Math.abs(boss.x - player.x) < (bHitW + player.width * 0.35) && Math.abs(boss.y - player.y) < (bHitH + player.height * 0.35)) {
             damagePlayer();
         }
@@ -1351,7 +1453,6 @@ function update() {
         }
     }
 
-    // Update Peluru Musuh
     for (let i = enemyBullets.length - 1; i >= 0; i--) {
         const b = enemyBullets[i];
         b.x += b.vx;
@@ -1364,7 +1465,6 @@ function update() {
         if (b.y > canvas.height + 20 || b.x < -20 || b.x > canvas.width + 20) enemyBullets.splice(i, 1);
     }
 
-    // Update Drops (+HP)
     for (let i = drops.length - 1; i >= 0; i--) {
         const d = drops[i];
         d.y += d.vy;
@@ -1377,7 +1477,6 @@ function update() {
         if (d.y > canvas.height + 30) drops.splice(i, 1);
     }
 
-    // Update Partikel & Floating Texts
     for (let i = particles.length - 1; i >= 0; i--) {
         const pt = particles[i];
         pt.x += pt.vx;
@@ -1423,7 +1522,6 @@ function drawSpriteEntity(entity, img, x, y, w, h, rotateDown = false, fallbackC
         ctx.fill();
     }
 
-    // Visual Lingkaran Waktu jika sedang terkena Time Stop
     if (entity && entity.status && entity.status.timeStopTimer > 0) {
         ctx.strokeStyle = '#60a5fa';
         ctx.lineWidth = 2;
@@ -1435,12 +1533,16 @@ function drawSpriteEntity(entity, img, x, y, w, h, rotateDown = false, fallbackC
     ctx.restore();
 }
 
-function drawLightningBolt(x1, y1, x2, y2) {
+function drawLightningBolt(x1, y1, x2, y2, intensity = 0) {
     ctx.save();
-    ctx.strokeStyle = '#fde047';
-    ctx.shadowColor = '#eab308';
-    ctx.shadowBlur = 10;
-    ctx.lineWidth = 2.5;
+    const boost = Math.min(5, intensity);
+    const isInferno = playerFusions.inferno && boost > 0;
+
+    // Cahaya dari lightning semakin tebal dan terang saat terjadi peningkatan dmg (Inferno)
+    ctx.strokeStyle = isInferno ? '#fffbeb' : '#fde047';
+    ctx.shadowColor = isInferno ? '#f97316' : '#eab308';
+    ctx.shadowBlur = 10 + boost * 4;
+    ctx.lineWidth = 2.5 + boost * 0.9;
     ctx.beginPath();
     ctx.moveTo(x1, y1);
 
@@ -1453,6 +1555,57 @@ function drawLightningBolt(x1, y1, x2, y2) {
     }
     ctx.lineTo(x2, y2);
     ctx.stroke();
+    ctx.restore();
+}
+
+function drawFlameThrowerCone() {
+    if (!playerSkills.flamethrower || weaponTimers.flameActive <= 0) return;
+
+    const ftCfg = GAME_CONFIG.weapons.flamethrower;
+    const ftLvl = ftCfg.levels[playerSkills.flamethrower];
+    const coneRange = ftCfg.baseRange * ftLvl.rangeMult;
+    const halfSpread = ftCfg.baseSpread;
+    const startX = player.x;
+    const startY = player.y - 26;
+
+    // Cahaya dari flame semakin tebal dan terang saat terjadi peningkatan dmg (Inferno)
+    const infernoBoost = playerFusions.inferno ? Math.min(5, lightningState.currentIntensity) : 0;
+
+    ctx.save();
+    const grad = ctx.createLinearGradient(startX, startY, startX, startY - coneRange);
+    if (infernoBoost > 0) {
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.92)');
+        grad.addColorStop(0.35, 'rgba(253, 224, 71, 0.78)');
+        grad.addColorStop(0.75, 'rgba(249, 115, 22, 0.52)');
+        grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+        ctx.shadowColor = '#f97316';
+        ctx.shadowBlur = 14 + infernoBoost * 4;
+    } else {
+        grad.addColorStop(0, 'rgba(254, 240, 138, 0.75)');
+        grad.addColorStop(0.45, 'rgba(249, 115, 22, 0.50)');
+        grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+    }
+
+    const leftAngle = -Math.PI / 2 - halfSpread;
+    const rightAngle = -Math.PI / 2 + halfSpread;
+    const flicker = Math.sin(frameCount * 0.6) * 8;
+
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.arc(startX, startY, coneRange + flicker, leftAngle, rightAngle);
+    ctx.closePath();
+    ctx.fill();
+
+    // Inti api bagian dalam (lebih tebal & terang jika Inferno aktif)
+    const innerScale = 0.58 + infernoBoost * 0.05;
+    ctx.fillStyle = infernoBoost > 0 ? 'rgba(255, 255, 255, 0.65)' : 'rgba(254, 249, 195, 0.42)';
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.arc(startX, startY, (coneRange + flicker) * innerScale, leftAngle * 0.98, rightAngle * 1.02);
+    ctx.closePath();
+    ctx.fill();
+
     ctx.restore();
 }
 
@@ -1470,7 +1623,6 @@ function render() {
         ctx.fillRect(s.x, s.y, s.size, s.size);
     }
 
-    // Drops (+HP)
     for (const d of drops) {
         ctx.save();
         ctx.translate(d.x, d.y);
@@ -1488,7 +1640,10 @@ function render() {
         ctx.restore();
     }
 
-    // Proyektil Pemain (Laser, HE, Arctic, Arctic Seeker, Shockwave Fan & Vortex)
+    // Visual Semburan Flame Thrower (di bawah pesawat)
+    drawFlameThrowerCone();
+
+    // Proyektil Pemain
     for (const p of projectiles) {
         if (p.kind === 'shockwave_fan') {
             ctx.save();
@@ -1536,7 +1691,6 @@ function render() {
         } else if (p.kind === 'he') {
             ctx.save();
             if (p.isDoom) {
-                // Peluru Doom Nova Hellfire membara
                 ctx.fillStyle = '#ef4444';
                 ctx.shadowColor = '#f97316';
                 ctx.shadowBlur = 14;
@@ -1577,9 +1731,9 @@ function render() {
         }
     }
 
-    // Efek Visual Petir (Lightning Chain)
+    // Efek Visual Petir
     for (const bolt of lightningState.visualBolts) {
-        drawLightningBolt(bolt.x1, bolt.y1, bolt.x2, bolt.y2);
+        drawLightningBolt(bolt.x1, bolt.y1, bolt.x2, bolt.y2, bolt.intensity || 0);
     }
 
     // Musuh Biasa
@@ -1600,7 +1754,6 @@ function render() {
     if (boss) {
         drawSpriteEntity(boss, assets.boss, boss.x, boss.y, boss.width, boss.height, true, '#7e22ce');
 
-        // Visual Shield Kebal 3 Detik Awal saat animasi masuk
         if (boss.introTimer > 0) {
             ctx.save();
             ctx.translate(boss.x, boss.y);
@@ -1615,7 +1768,6 @@ function render() {
             ctx.fill();
             ctx.stroke();
 
-            // Label Status Kebal
             const secsLeft = (boss.introTimer / 60).toFixed(1);
             ctx.fillStyle = '#fde047';
             ctx.font = 'bold 12px monospace';
@@ -1639,7 +1791,6 @@ function render() {
             drawSpriteEntity(null, assets.player, player.x, player.y, player.width, player.height, false, '#1d4ed8');
         }
 
-        // Visual Shield Es dari Arctic Bullet 4B–6B
         if (player.hasShield) {
             ctx.save();
             ctx.strokeStyle = '#67e8f9';
@@ -1677,16 +1828,14 @@ function render() {
         ctx.fillText(ft.text, ft.x, ft.y);
     }
 
-    // Render Virtual Analog Semi-Transparan (Khusus Mobile saat bermain)
+    // Render Virtual Analog Semi-Transparan
     if (isMobileDevice && (gameState === 'WAVE_MINIONS' || gameState === 'BOSS_WARNING' || gameState === 'BOSS_FIGHT')) {
         ctx.save();
-        // Jika belum disentuh, tampilkan posisi panduan samar di kanan bawah
         const baseX = joystick.active ? joystick.baseX : canvas.width - 95;
         const baseY = joystick.active ? joystick.baseY : canvas.height - 105;
         const knobX = joystick.active ? joystick.knobX : baseX;
         const knobY = joystick.active ? joystick.knobY : baseY;
 
-        // Lingkaran Luar Analog (Sangat transparan)
         ctx.beginPath();
         ctx.arc(baseX, baseY, joystick.maxRadius, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
@@ -1695,7 +1844,6 @@ function render() {
         ctx.strokeStyle = 'rgba(56, 189, 248, 0.28)';
         ctx.stroke();
 
-        // Lingkaran Dalam / Thumb Knob (Agak transparan)
         ctx.beginPath();
         ctx.arc(knobX, knobY, 22, 0, Math.PI * 2);
         ctx.fillStyle = joystick.active ? 'rgba(56, 189, 248, 0.45)' : 'rgba(148, 163, 184, 0.25)';
@@ -1720,53 +1868,51 @@ function render() {
     ctx.fillStyle = '#f8fafc';
     ctx.fillText(`SCR:${score}`, 66, 20);
 
-    // Tampilkan semua senjata aktif & levelnya di baris kedua HUD
     const activeTags = [];
     if (playerSkills.laser) activeTags.push(`LSR:${playerSkills.laser.toUpperCase()}`);
     if (playerSkills.he) activeTags.push(`HE:${playerSkills.he.toUpperCase()}`);
     if (playerSkills.lightning) activeTags.push(`LGT:${playerSkills.lightning.toUpperCase()}`);
     if (playerSkills.arctic) activeTags.push(`ARC:${playerSkills.arctic.toUpperCase()}`);
     if (playerSkills.shockwave) activeTags.push(`SHK:${playerSkills.shockwave.toUpperCase()}`);
+    if (playerSkills.flamethrower) activeTags.push(`FLM:${playerSkills.flamethrower.toUpperCase()}`);
 
-    if (playerFusions.cryoMachine) activeTags.push('★CRYO');
-    if (playerFusions.timeStop) activeTags.push('★TIME');
-    if (playerFusions.doom) activeTags.push('★DOOM');
+    if (playerFusions.cryoMachine) activeTags.push('CRYO');
+    if (playerFusions.timeStop) activeTags.push('TIME');
+    if (playerFusions.doom) activeTags.push('DOOM');
+    if (playerFusions.inferno) activeTags.push('INFERNO');
+    if (playerFusions.electroDoom) activeTags.push('E-DOOM');
 
-    ctx.fillStyle = '#38bdf8';
-    ctx.font = '10px monospace';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '9.5px monospace';
     ctx.fillText(activeTags.join(' '), 12, 42);
 
-    // Tengah: Wave & Timer
     ctx.textAlign = 'center';
     ctx.fillStyle = '#facc15';
     ctx.font = 'bold 14px monospace';
-    ctx.fillText(`WAVE ${wave}`, canvas.width / 2 + 24, 20);
+    ctx.fillText(`WAVE ${wave}`, canvas.width / 2 + 30, 20);
 
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '11px monospace';
     if (gameState === 'BOSS_FIGHT') {
         ctx.fillStyle = '#f87171';
-        ctx.fillText('BOSS FIGHT!', canvas.width / 2 + 24, 42);
+        ctx.fillText('BOSS FIGHT!', canvas.width / 2 + 30, 42);
     } else {
         const secsLeft = Math.max(0, Math.ceil(waveTimerFrames / 60));
         const quotaLeft = Math.max(0, enemyQuotaThisWave - enemiesSpawnedThisWave + enemies.length);
-        ctx.fillText(`${secsLeft}s | MSH:${quotaLeft}`, canvas.width / 2 + 24, 42);
+        ctx.fillText(`${secsLeft}s | MSH:${quotaLeft}`, canvas.width / 2 + 30, 42);
     }
 
-    // Kanan: HP Bar Pemain
     for (let h = 0; h < GAME_CONFIG.player.maxHp; h++) {
         ctx.fillStyle = h < player.hp ? '#22c55e' : '#334155';
         ctx.fillRect(canvas.width - 18 - h * 14, 16, 10, 18);
     }
 
-    // EXP Bar
     const expRatio = Math.min(1, currentExp / expToNextLevel);
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(0, 58, canvas.width, 6);
     ctx.fillStyle = '#4ade80';
     ctx.fillRect(0, 58, canvas.width * expRatio, 6);
 
-    // Boss Health Bar
     if (gameState === 'BOSS_FIGHT' && boss) {
         const barW = canvas.width - 60;
         const hpRatio = Math.max(0, boss.hp / boss.maxHp);
@@ -1778,7 +1924,6 @@ function render() {
         ctx.strokeRect(30, 74, barW, 12);
     }
 
-    // Peringatan Boss
     if (gameState === 'BOSS_WARNING' && Math.floor(warningTimer / 12) % 2 === 0) {
         ctx.fillStyle = 'rgba(220, 38, 38, 0.25)';
         ctx.fillRect(0, canvas.height / 2 - 45, canvas.width, 90);
@@ -1791,77 +1936,67 @@ function render() {
         ctx.fillText(`WAVE ${wave} BOSS APPROACHING`, canvas.width / 2, canvas.height / 2 + 22);
     }
 
-    // Overlay Pilihan Skill Tree
+    // ==========================================
+    // OVERLAY PILIHAN SKILL TREE (WARNA NETRAL MINIMALIS)
+    // ==========================================
     if (gameState === 'SKILL_SELECT') {
-        ctx.fillStyle = 'rgba(6, 9, 19, 0.88)';
+        ctx.fillStyle = 'rgba(6, 9, 19, 0.90)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#4ade80';
-        ctx.font = 'bold 16px monospace';
-        ctx.fillText(`LEVEL UP! (LV.${playerLevel})`, canvas.width / 2, 140);
-
-        ctx.fillStyle = '#facc15';
-        ctx.font = 'bold 22px monospace';
-        ctx.fillText('PILIH UPGRADE SKILL', canvas.width / 2, 168);
-
         ctx.fillStyle = '#94a3b8';
-        ctx.font = '12px monospace';
-        ctx.fillText('Klik kartu atau tekan tombol [1] / [2] / [3]', canvas.width / 2, 194);
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText(`LEVEL UP · LV.${playerLevel}`, canvas.width / 2, 140);
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 21px monospace';
+        ctx.fillText('PILIH UPGRADE', canvas.width / 2, 168);
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '11.5px monospace';
+        ctx.fillText('Pilih kartu atau tekan tombol [1] / [2] / [3]', canvas.width / 2, 194);
 
         skillChoices.forEach((choice, idx) => {
             const cardY = 230 + idx * 125;
             ctx.save();
 
+            // Kartu minimalis warna netral (termasuk untuk senjata fusion)
+            ctx.fillStyle = choice.isFusion ? '#1e293b' : '#0f172a';
+            ctx.fillRect(40, cardY, canvas.width - 80, 105);
+
+            ctx.strokeStyle = choice.isFusion ? '#cbd5e1' : (choice.isEvo ? '#94a3b8' : '#475569');
+            ctx.lineWidth = choice.isFusion ? 2.5 : 1.5;
+            ctx.strokeRect(40, cardY, canvas.width - 80, 105);
+
             if (choice.isFusion) {
-                // Highlight Khusus Senjata Fusion (Border neon menyala, background gradasi elegan)
-                const pulse = Math.sin(frameCount * 0.15) * 4;
-                ctx.fillStyle = '#1e1138';
-                ctx.fillRect(38, cardY - 2, canvas.width - 76, 109);
-
-                ctx.strokeStyle = '#f43f5e';
-                ctx.shadowColor = '#ec4899';
-                ctx.shadowBlur = 14 + pulse;
-                ctx.lineWidth = 3.5;
-                ctx.strokeRect(38, cardY - 2, canvas.width - 76, 109);
-
-                // Badge Emas Khusus di pojok kanan kartu
-                ctx.fillStyle = '#facc15';
-                ctx.font = 'bold 9px monospace';
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = 'bold 9.5px monospace';
                 ctx.textAlign = 'right';
-                ctx.shadowBlur = 6;
-                ctx.fillText('★ FUSION LEGENDARY ★', canvas.width - 48, cardY + 18);
-            } else {
-                ctx.fillStyle = '#0f172a';
-                ctx.fillRect(40, cardY, canvas.width - 80, 105);
-                ctx.strokeStyle = choice.color;
-                ctx.lineWidth = choice.isEvo ? 3 : 2;
-                ctx.strokeRect(40, cardY, canvas.width - 80, 105);
+                ctx.fillText('FUSION', canvas.width - 52, cardY + 20);
             }
 
             ctx.textAlign = 'left';
-            ctx.fillStyle = choice.color;
-            ctx.font = 'bold 15px monospace';
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = 'bold 14.5px monospace';
             ctx.fillText(`[${idx + 1}] ${choice.title}`, 56, cardY + 30);
 
             if (choice.isFusion) {
-                ctx.fillStyle = '#fb7185';
-                ctx.font = 'bold 10px monospace';
-                ctx.fillText(`★ SYARAT: ${choice.reqText}`, 56, cardY + 49);
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '10.5px monospace';
+                ctx.fillText(`Syarat: ${choice.reqText}`, 56, cardY + 50);
             } else if (choice.isEvo) {
-                ctx.fillStyle = '#facc15';
-                ctx.font = 'bold 11px monospace';
-                ctx.fillText('★ EVOLUSI CABANG', 56, cardY + 50);
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '10.5px monospace';
+                ctx.fillText('Evolusi Cabang', 56, cardY + 50);
             }
 
-            ctx.fillStyle = '#e2e8f0';
+            ctx.fillStyle = '#cbd5e1';
             ctx.font = '11px monospace';
             ctx.fillText(choice.desc, 56, cardY + (choice.isEvo || choice.isFusion ? 72 : 64));
             ctx.restore();
         });
     }
 
-    // Layar Start & Game Over
     if (gameState === 'START' || gameState === 'GAME_OVER') {
         ctx.fillStyle = 'rgba(6, 9, 19, 0.8)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1887,23 +2022,19 @@ function render() {
 
 let lastTimestamp = 0;
 let frameAccumulator = 0;
-const FIXED_TIMESTEP = 1000 / 60; // Kunci kecepatan logika di 60 FPS (16.67 ms per frame)
+const FIXED_TIMESTEP = 1000 / 60;
 
 function gameLoop(timestamp) {
     if (!lastTimestamp) lastTimestamp = timestamp;
-
-    // Batasi maksimal selisih waktu (misal 100ms) agar game tidak loncat saat pindah tab
     const deltaTime = Math.min(100, timestamp - lastTimestamp);
     lastTimestamp = timestamp;
     frameAccumulator += deltaTime;
 
     try {
-        // Jalankan update() tepat 60 kali per detik berapapun Hz layar HP-nya
         while (frameAccumulator >= FIXED_TIMESTEP) {
             update();
             frameAccumulator -= FIXED_TIMESTEP;
         }
-
         render();
     } catch (err) {
         console.error('Game loop error:', err);
@@ -1915,7 +2046,7 @@ function gameLoop(timestamp) {
 requestAnimationFrame(gameLoop);
 
 // ==========================================
-// 9. DEVELOPER API (Untuk diakses oleh devtool.js)
+// 9. DEVELOPER API
 // ==========================================
 window.GAME_DEV = {
     getPlayer: () => player,
@@ -1928,12 +2059,12 @@ window.GAME_DEV = {
             weaponTimers.arcticShield = 60 * 60;
         }
         const name = GAME_CONFIG.weapons[wKey]?.name || wKey;
-        spawnFloatingText(player.x, player.y - 35, `${name}: ${lvl || 'OFF'}`, '#c084fc', 13);
+        spawnFloatingText(player.x, player.y - 35, `${name}: ${lvl || 'OFF'}`, '#cbd5e1', 13);
     },
     setFusion: (fKey, active = true) => {
         playerFusions[fKey] = active;
         const name = GAME_CONFIG.fusions[fKey]?.name || fKey;
-        spawnFloatingText(player.x, player.y - 45, `Fusion ${name}: ${active ? 'ON' : 'OFF'}`, active ? '#06b6d4' : '#ef4444', 14);
+        spawnFloatingText(player.x, player.y - 45, `Fusion ${name}: ${active ? 'ON' : 'OFF'}`, '#f8fafc', 14);
     },
     setLevel: (lvl) => {
         playerLevel = lvl;
@@ -1941,9 +2072,7 @@ window.GAME_DEV = {
         expToNextLevel = GAME_CONFIG.leveling.baseExpRequired + (playerLevel - 1) * GAME_CONFIG.leveling.expIncrementPerLvl;
         spawnFloatingText(player.x, player.y - 35, `Level -> ${lvl}`, '#4ade80', 14);
     },
-    addExp: (amt) => {
-        addExp(amt);
-    },
+    addExp: (amt) => addExp(amt),
     healFull: () => {
         player.hp = GAME_CONFIG.player.maxHp;
         spawnFloatingText(player.x, player.y - 35, 'FULL HEAL!', '#22c55e', 14);
