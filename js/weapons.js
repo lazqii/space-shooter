@@ -112,11 +112,17 @@ function triggerSkillSelection() {
     GAME_STATE.gameState = 'SKILL_SELECT';
 }
 
+function recordBuildProgress(key, label) {
+    GAME_STATE.buildHistory[key] = label;
+}
+
 function applySkillChoice(choice) {
     if (choice.isFusion) {
         playerFusions[choice.fusionKey] = true;
         consumeFusionMaterials(choice.fusionKey);
         const cleanTitle = choice.title.replace('FUSION: ', '');
+        recordBuildProgress(`fusion_${choice.fusionKey}`, `${cleanTitle} (FUSION)`);
+
         spawnFloatingText(player.x, player.y - 45, `FUSION: ${cleanTitle}!`, '#f8fafc', 16);
         createExplosion(player.x, player.y, ['#e2e8f0', '#ffffff', '#94a3b8'], 32);
         GAME_STATE.screenShake = 14;
@@ -126,6 +132,10 @@ function applySkillChoice(choice) {
         GAME_STATE.score += 1000;
     } else {
         playerSkills[choice.weapon] = choice.nextLvl;
+        const wCfg = GAME_CONFIG.weapons[choice.weapon];
+        const lvlLabel = choice.nextLvl.toUpperCase();
+        recordBuildProgress(choice.weapon, `${wCfg.name} Lv.${lvlLabel}`);
+
         if (choice.weapon === 'arctic' && choice.nextLvl === '4b') {
             player.hasShield = true;
             weaponTimers.arcticShield = Math.round(GAME_CONFIG.weapons.arctic.levels['4b'].shieldIntervalSec * 60);

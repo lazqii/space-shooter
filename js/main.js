@@ -30,6 +30,11 @@ function startGame() {
     GAME_STATE.currentExp = 0;
     GAME_STATE.expToNextLevel = GAME_CONFIG.leveling.baseExpRequired;
     GAME_STATE.pendingLevelUps = 0;
+    GAME_STATE.enemiesKilled = 0;
+    GAME_STATE.bossesKilled = 0;
+    GAME_STATE.playTimeFrames = 0;
+    GAME_STATE.buildHistory = { laser: `${GAME_CONFIG.weapons.laser.name} Lv.1` };
+    GAME_STATE.shareFeedbackTimer = 0;
 
     playerSkills = { laser: '1', he: null, lightning: null, arctic: null, shockwave: null, flamethrower: null };
     weaponTimers = {
@@ -72,7 +77,11 @@ function update() {
         if (lightningState.visualBolts[i].life <= 0) lightningState.visualBolts.splice(i, 1);
     }
 
+    if (GAME_STATE.shareFeedbackTimer > 0) GAME_STATE.shareFeedbackTimer--;
+
     if (GAME_STATE.gameState === 'START' || GAME_STATE.gameState === 'GAME_OVER' || GAME_STATE.gameState === 'SKILL_SELECT') return;
+
+    GAME_STATE.playTimeFrames++;
 
     applyPlayerMovement();
 

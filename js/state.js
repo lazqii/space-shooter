@@ -35,7 +35,14 @@ const GAME_STATE = {
     currentExp: 0,
     expToNextLevel: GAME_CONFIG.leveling.baseExpRequired,
     pendingLevelUps: 0,
-    skillChoices: []
+    skillChoices: [],
+
+    // Statistik untuk Mission Report (Game Over)
+    enemiesKilled: 0,
+    bossesKilled: 0,
+    playTimeFrames: 0,
+    buildHistory: {},
+    shareFeedbackTimer: 0
 };
 
 const player = {

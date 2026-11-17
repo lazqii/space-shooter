@@ -23,9 +23,92 @@ function toCanvasXY(clientX, clientY) {
     };
 }
 
+
+function formatPlayTime(frames) {
+    const totalSec = Math.floor(frames / 60);
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function getGameOverLayout() {
+    const cx = canvas.width / 2;
+    const cardW = canvas.width - 56;
+    const cardX = 28;
+    const cardY = 85;
+    const cardH = Math.min(475, canvas.height - 225);
+    const btnY = cardY + cardH + 18;
+    const btnGap = 12;
+    const btnW = (cardW - btnGap) / 2;
+
+    return {
+        cx, cardX, cardY, cardW, cardH,
+        shareBtn: { x: cardX, y: btnY, w: btnW, h: 48 },
+        retryBtn: { x: cardX + btnW + btnGap, y: btnY, w: btnW, h: 48 }
+    };
+}
+
+async function shareGameResult() {
+    const timeStr = formatPlayTime(GAME_STATE.playTimeFrames);
+    const buildList = Object.values(GAME_STATE.buildHistory);
+    const buildSummary = buildList.length > 0 ? buildList.join(', ') : 'Laser Gun Lv.1';
+    const gameUrl = 'https://spaceshooter.lazqii.my.id';
+
+    const shareText =
+        `🚀 SPACE DEFENDER - MISSION REPORT\n` +
+        `🏆 Skor: ${GAME_STATE.score.toLocaleString('id-ID')} (Wave ${GAME_STATE.wave} | Lv.${GAME_STATE.playerLevel})\n` +
+        `👾 Musuh: ${GAME_STATE.enemiesKilled} | 👹 Boss: ${GAME_STATE.bossesKilled}\n` +
+        `⏱️ Bertahan: ${timeStr}\n` +
+        `⚡ Build: ${buildSummary}\n\n` +
+        `Berani pecahin rekor skorku? Mainkan langsung di:\n${gameUrl}`;
+
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'Space Defender - Rekor Skor!',
+                text: shareText
+            });
+            GAME_STATE.shareFeedbackTimer = 150;
+            return;
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+        }
+    }
+
+    // Fallback untuk browser desktop: salin otomatis ke clipboard
+    try {
+        await navigator.clipboard.writeText(shareText);
+        GAME_STATE.shareFeedbackTimer = 180;
+    } catch (_) {
+        const tempInput = document.createElement('textarea');
+        tempInput.value = shareText;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
+        GAME_STATE.shareFeedbackTimer = 180;
+    }
+}
+
+function isInsideRect(x, y, rect) {
+    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+}
+
 function handleMenuAction(x, y) {
-    if (GAME_STATE.gameState === 'START' || GAME_STATE.gameState === 'GAME_OVER') {
+    if (GAME_STATE.gameState === 'START') {
         startGame();
+        return true;
+    }
+    if (GAME_STATE.gameState === 'GAME_OVER') {
+        const layout = getGameOverLayout();
+        if (isInsideRect(x, y, layout.shareBtn)) {
+            shareGameResult();
+            return true;
+        }
+        if (isInsideRect(x, y, layout.retryBtn)) {
+            startGame();
+            return true;
+        }
         return true;
     }
     if (GAME_STATE.gameState === 'SKILL_SELECT') {

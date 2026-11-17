@@ -276,6 +276,7 @@ function updateEnemiesAndBoss() {
 
         if (e.hp <= 0) {
             GAME_STATE.score += e.cfg.score;
+            GAME_STATE.enemiesKilled++;
             createExplosion(e.x, e.y, e.type === 'heavy' ? ['#e11d48', '#facc15'] : ['#c026d3', '#facc15'], 16);
             spawnFloatingText(e.x, e.y + 10, `+${e.cfg.expReward} EXP`, '#4ade80', 11);
             if (e.type === 'heavy' && Math.random() < GAME_CONFIG.drops.heavyHealChance) {
@@ -364,6 +365,7 @@ function updateEnemiesAndBoss() {
 
         if (boss && boss.hp <= 0) {
             GAME_STATE.score += bCfg.baseScore * GAME_STATE.wave;
+            GAME_STATE.bossesKilled++;
             GAME_STATE.screenShake = 22;
             createExplosion(boss.x, boss.y, ['#7e22ce', '#f59e0b', '#38bdf8', '#ffffff'], 55);
             drops.push({ x: boss.x, y: boss.y, vy: 2, kind: 'HEAL' });

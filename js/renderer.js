@@ -242,24 +242,152 @@ function renderHUDAndOverlays() {
         });
     }
 
-    if (GAME_STATE.gameState === 'START' || GAME_STATE.gameState === 'GAME_OVER') {
-        ctx.fillStyle = 'rgba(6, 9, 19, 0.8)';
+    if (GAME_STATE.gameState === 'START') {
+        ctx.fillStyle = 'rgba(6, 9, 19, 0.85)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.textAlign = 'center';
-        ctx.fillStyle = GAME_STATE.gameState === 'START' ? '#38bdf8' : '#ef4444';
+        ctx.fillStyle = '#38bdf8';
         ctx.font = 'bold 34px monospace';
-        ctx.fillText(GAME_STATE.gameState === 'START' ? 'SPACE DEFENDER' : 'GAME OVER', canvas.width / 2, canvas.height / 2 - 50);
-
-        if (GAME_STATE.gameState === 'GAME_OVER') {
-            ctx.fillStyle = '#f8fafc';
-            ctx.font = '18px monospace';
-            ctx.fillText(`SCORE: ${GAME_STATE.score} | WAVE ${GAME_STATE.wave} | LV.${GAME_STATE.playerLevel}`, canvas.width / 2, canvas.height / 2 - 10);
-        }
+        ctx.fillText('SPACE DEFENDER', canvas.width / 2, canvas.height / 2 - 40);
 
         ctx.fillStyle = '#facc15';
         ctx.font = 'bold 16px monospace';
-        ctx.fillText('KLIK / TEKAN SPASI UNTUK MULAI', canvas.width / 2, canvas.height / 2 + 40);
+        ctx.fillText('KLIK / TEKAN SPASI UNTUK MULAI', canvas.width / 2, canvas.height / 2 + 25);
+    }
+
+    if (GAME_STATE.gameState === 'GAME_OVER') {
+        const layout = getGameOverLayout();
+        const { cx, cardX, cardY, cardW, cardH, shareBtn, retryBtn } = layout;
+
+        ctx.fillStyle = 'rgba(6, 9, 19, 0.92)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Panel Kartu Mission Report
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(cardX, cardY, cardW, cardH);
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cardX, cardY, cardW, cardH);
+
+        // Header Mission Report
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 26px monospace';
+        ctx.fillText('MISSION FAILED', cx, cardY + 38);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px monospace';
+        ctx.fillText('RINGKASAN STATISTIK PERTEMPURAN', cx, cardY + 58);
+
+        // Skor Utama & High Score
+        ctx.fillStyle = '#facc15';
+        ctx.font = 'bold 22px monospace';
+        ctx.fillText(`SCORE: ${GAME_STATE.score.toLocaleString('id-ID')}`, cx, cardY + 92);
+
+        ctx.fillStyle = '#4ade80';
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText(`BEST SCORE: ${GAME_STATE.highScore.toLocaleString('id-ID')}`, cx, cardY + 112);
+
+        // Garis pemisah
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cardX + 18, cardY + 126);
+        ctx.lineTo(cardX + cardW - 18, cardY + 126);
+        ctx.stroke();
+
+        // Grid Statistik 2 Kolom
+        const col1X = cardX + 22;
+        const col2X = cx + 10;
+        let statY = cardY + 150;
+        const rowGap = 24;
+
+        ctx.textAlign = 'left';
+        ctx.font = '12px monospace';
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText('Wave Dicapai', col1X, statY);
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillText(`: Wave ${GAME_STATE.wave}`, col1X + 95, statY);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText('Level Akhir', col2X, statY);
+        ctx.fillStyle = '#4ade80';
+        ctx.fillText(`: Lv.${GAME_STATE.playerLevel}`, col2X + 88, statY);
+
+        statY += rowGap;
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText('Waktu Main', col1X, statY);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText(`: ${formatPlayTime(GAME_STATE.playTimeFrames)}`, col1X + 95, statY);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText('Boss Kalah', col2X, statY);
+        ctx.fillStyle = '#c084fc';
+        ctx.fillText(`: ${GAME_STATE.bossesKilled}`, col2X + 88, statY);
+
+        statY += rowGap;
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText('Musuh Kalah', col1X, statY);
+        ctx.fillStyle = '#fb7185';
+        ctx.fillText(`: ${GAME_STATE.enemiesKilled}`, col1X + 95, statY);
+
+        // Garis pemisah Build
+        statY += 18;
+        ctx.strokeStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.moveTo(cardX + 18, statY);
+        ctx.lineTo(cardX + cardW - 18, statY);
+        ctx.stroke();
+
+        // Daftar Power-Up / Senjata & Level yang Diambil
+        statY += 22;
+        ctx.fillStyle = '#facc15';
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText('POWER-UP & BUILD DIAMBIL:', col1X, statY);
+
+        const buildItems = Object.values(GAME_STATE.buildHistory);
+        if (buildItems.length === 0) buildItems.push('Laser Gun Lv.1');
+
+        statY += 22;
+        ctx.font = '11.5px monospace';
+        buildItems.forEach((item, index) => {
+            if (statY + index * 20 < cardY + cardH - 12) {
+                const isFusionItem = item.includes('(FUSION)');
+                ctx.fillStyle = isFusionItem ? '#38bdf8' : '#cbd5e1';
+                ctx.fillText(`• ${item}`, col1X + 4, statY + index * 20);
+            }
+        });
+
+        // Tombol 1: Bagikan ke Sosmed
+        ctx.fillStyle = '#0284c7';
+        ctx.fillRect(shareBtn.x, shareBtn.y, shareBtn.w, shareBtn.h);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(shareBtn.x, shareBtn.y, shareBtn.w, shareBtn.h);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 13px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('BAGIKAN SKOR', shareBtn.x + shareBtn.w / 2, shareBtn.y + 29);
+
+        // Tombol 2: Main Lagi
+        ctx.fillStyle = '#15803d';
+        ctx.fillRect(retryBtn.x, retryBtn.y, retryBtn.w, retryBtn.h);
+        ctx.strokeStyle = '#4ade80';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(retryBtn.x, retryBtn.y, retryBtn.w, retryBtn.h);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('MAIN LAGI', retryBtn.x + retryBtn.w / 2, retryBtn.y + 29);
+
+        // Notifikasi setelah tombol Bagikan diklik
+        if (GAME_STATE.shareFeedbackTimer > 0) {
+            ctx.fillStyle = '#4ade80';
+            ctx.font = 'bold 11.5px monospace';
+            ctx.fillText('✓ Teks skor & link disalin! Siap ditempel ke sosmed.', cx, shareBtn.y + shareBtn.h + 24);
+        }
     }
 }
 
