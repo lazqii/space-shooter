@@ -5,20 +5,26 @@ const ctx = canvas.getContext('2d');
 
 function resizeCanvasToAspect() {
     const wrapper = document.getElementById('game-wrapper');
+    if (!wrapper) return;
     const rect = wrapper.getBoundingClientRect();
-    const aspect = rect.height / rect.width;
 
-    canvas.width = 480;
-    canvas.height = Math.round(480 * aspect);
+    if (rect.width > 10 && rect.height > 10) {
+        const aspect = rect.height / rect.width;
+        canvas.width = 480;
+        canvas.height = Math.max(640, Math.min(1000, Math.round(480 * aspect)));
+    } else {
+        canvas.width = 480;
+        canvas.height = 800;
+    }
 
-    // Pastikan posisi pesawat tetap aman di dalam batas layar baru
     if (typeof player !== 'undefined') {
+        player.x = Math.min(Math.max(32, player.x), canvas.width - 32);
         player.y = Math.min(player.y, canvas.height - 40);
     }
 }
 
 window.addEventListener('resize', resizeCanvasToAspect);
-resizeCanvasToAspect();
+window.addEventListener('load', resizeCanvasToAspect);
 
 // ==========================================
 // 1. ASSET LOADER
