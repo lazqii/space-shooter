@@ -41,12 +41,13 @@ let currentExp = 0;
 let expToNextLevel = GAME_CONFIG.leveling.baseExpRequired;
 let pendingLevelUps = 0;
 
-// Level masing-masing dari 4 senjata (null jika belum dibuka)
+// Level masing-masing dari 5 senjata (null jika belum dibuka)
 let playerSkills = {
     laser: '1',
     he: null,
     lightning: null,
-    arctic: null
+    arctic: null,
+    shockwave: null
 };
 
 let weaponTimers = {
@@ -55,7 +56,15 @@ let weaponTimers = {
     lightning: 0,
     arctic: 0,
     arcticSeeker: 0,
-    arcticShield: 0
+    arcticShield: 0,
+    shockwave: 0
+};
+
+// Status 3 Senjata Fusion (aktif jika true)
+let playerFusions = {
+    cryoMachine: false, // Laser 6B + Arctic 6A
+    timeStop: false,    // HE 6B + Arctic 6A
+    doom: false         // Laser 6A + HE 6A
 };
 
 // State khusus Lightning Overload (Cabang A) & visual petir
@@ -109,6 +118,8 @@ function addExp(amount) {
         playerLevel++;
         expToNextLevel = GAME_CONFIG.leveling.baseExpRequired + (playerLevel - 1) * GAME_CONFIG.leveling.expIncrementPerLvl;
         pendingLevelUps++;
+        // Immune 1 detik (60 frame) saat naik level
+        player.invulnTimer = 60;
     }
 
     if (pendingLevelUps > 0 && gameState !== 'SKILL_SELECT' && gameState !== 'GAME_OVER') {
@@ -118,10 +129,40 @@ function addExp(amount) {
 
 function getAvailableSkillUpgrades() {
     const pool = [];
-    const weaponKeys = ['laser', 'he', 'lightning', 'arctic'];
+    const weaponKeys = ['laser', 'he', 'lightning', 'arctic', 'shockwave'];
 
+    // 1. Cek Senjata Fusion:
+    // Syarat: kedua senjata harus MAX & player minimal level 15
+    const fusionCards = [];
+    if (GAME_CONFIG.fusions && playerLevel >= 15) {
+        for (const fKey in GAME_CONFIG.fusions) {
+            const fData = GAME_CONFIG.fusions[fKey];
+            if (!playerFusions[fKey]) {
+                let eligible = true;
+                for (const rW in fData.req) {
+                    if (playerSkills[rW] !== fData.req[rW]) {
+                        eligible = false;
+                        break;
+                    }
+                }
+                if (eligible) {
+                    fusionCards.push({
+                        isFusion: true,
+                        fusionKey: fKey,
+                        title: `★ FUSION: ${fData.name}`,
+                        desc: fData.desc,
+                        reqText: fData.reqText,
+                        color: fData.color
+                    });
+                }
+            }
+        }
+    }
+
+    // 2. Kumpulkan upgrade senjata normal
     for (const wKey of weaponKeys) {
         const wCfg = GAME_CONFIG.weapons[wKey];
+        if (!wCfg) continue;
         const curLvl = playerSkills[wKey];
 
         if (!curLvl) {
@@ -180,13 +221,17 @@ function getAvailableSkillUpgrades() {
         }
     }
 
-    if (pool.length === 0) {
-        pool.push({ weapon: 'heal', nextLvl: null, title: 'Emergency Repair', desc: 'Pulihkan +2 HP Pesawat', color: '#22c55e' });
-        pool.push({ weapon: 'bonus', nextLvl: null, title: 'Overcharge Core', desc: '+1000 Bonus Score', color: '#facc15' });
+    // Prioritaskan kartu Fusion di posisi paling utama (paling atas)
+    const shuffledNormal = pool.sort(() => Math.random() - 0.5);
+    const combined = [...fusionCards, ...shuffledNormal];
+
+    if (combined.length === 0) {
+        combined.push({ weapon: 'heal', nextLvl: null, title: 'Emergency Repair', desc: 'Pulihkan +2 HP Pesawat', color: '#22c55e' });
+        combined.push({ weapon: 'bonus', nextLvl: null, title: 'Overcharge Core', desc: '+1000 Bonus Score', color: '#facc15' });
     }
 
-    // Acak urutan dan tampilkan 3 kartu pilihan
-    return pool.sort(() => Math.random() - 0.5).slice(0, 3);
+    // Tampilkan hingga 3 kartu pilihan
+    return combined.slice(0, 3);
 }
 
 function triggerSkillSelection() {
@@ -197,7 +242,12 @@ function triggerSkillSelection() {
 }
 
 function applySkillChoice(choice) {
-    if (choice.weapon === 'heal') {
+    if (choice.isFusion) {
+        playerFusions[choice.fusionKey] = true;
+        spawnFloatingText(player.x, player.y - 45, `FUSION: ${choice.title.replace('★ FUSION: ', '')}!`, choice.color, 16);
+        createExplosion(player.x, player.y, [choice.color, '#ffffff', '#facc15'], 36);
+        screenShake = 16;
+    } else if (choice.weapon === 'heal') {
         player.hp = Math.min(GAME_CONFIG.player.maxHp, player.hp + 2);
     } else if (choice.weapon === 'bonus') {
         score += 1000;
@@ -213,6 +263,8 @@ function applySkillChoice(choice) {
     if (pendingLevelUps > 0) {
         triggerSkillSelection();
     } else {
+        // Berikan immune 1 detik saat pemain kembali dari menu skill
+        player.invulnTimer = Math.max(player.invulnTimer, 60);
         gameState = previousState;
     }
 }
@@ -393,8 +445,9 @@ function startGame() {
     expToNextLevel = GAME_CONFIG.leveling.baseExpRequired;
     pendingLevelUps = 0;
 
-    playerSkills = { laser: '1', he: null, lightning: null, arctic: null };
-    weaponTimers = { laser: 0, he: 0, lightning: 0, arctic: 0, arcticSeeker: 0, arcticShield: 0 };
+    playerSkills = { laser: '1', he: null, lightning: null, arctic: null, shockwave: null };
+    weaponTimers = { laser: 0, he: 0, lightning: 0, arctic: 0, arcticSeeker: 0, arcticShield: 0, shockwave: 0 };
+    playerFusions = { cryoMachine: false, timeStop: false, doom: false };
     lightningState = { lockedTarget: null, lockFrames: 0, visualBolts: [] };
 
     player.x = canvas.width / 2;
@@ -436,33 +489,96 @@ function findNearestTarget(fromX, fromY, excludeList = [], maxDist = Infinity) {
 }
 
 function fireActiveWeapons() {
-    // 1. LASER GUN
+    // 1. LASER GUN (Termasuk Fusion: DOOM & CRYO MACHINE)
     if (playerSkills.laser && weaponTimers.laser <= 0) {
         const wCfg = GAME_CONFIG.weapons.laser;
         const lvlData = wCfg.levels[playerSkills.laser];
-        const branches = lvlData.branches;
-        const spread = lvlData.spread;
-        const speed = lvlData.speed;
 
-        for (let i = 0; i < branches; i++) {
-            let vx = 0;
-            let vy = -speed;
-            if (branches > 1 && spread > 0) {
+        // FUSION 3: DOOM (Laser 6A + HE Cannon 6A)
+        // Sekarang laser yang ditembakkan digantikan dengan HE Gun Nova Fan (5 meriam HE bercabang)
+        if (playerFusions.doom) {
+            const heCfg = GAME_CONFIG.weapons.he;
+            const heLvl = heCfg.levels['6a'];
+            const branches = 5;
+            const spread = 0.36;
+            const speed = 9.2;
+
+            for (let i = 0; i < branches; i++) {
                 const angle = -Math.PI / 2 + (i - (branches - 1) / 2) * (spread / (branches - 1) * 2);
-                vx = Math.cos(angle) * speed;
-                vy = Math.sin(angle) * speed;
+                projectiles.push({
+                    kind: 'he',
+                    isDoom: true,
+                    x: player.x,
+                    y: player.y - 28,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    atk: heCfg.baseAtk * 1.15,
+                    radius: heCfg.explosionRadius * 1.1,
+                    lvlData: heLvl,
+                    color: '#ef4444'
+                });
             }
-            projectiles.push({
-                kind: 'laser',
-                x: player.x,
-                y: player.y - 28,
-                vx,
-                vy,
-                atk: wCfg.baseAtk,
-                color: wCfg.color
-            });
+            weaponTimers.laser = Math.max(1, Math.round(wCfg.baseCooldown / lvlData.shotsPerSec));
         }
-        weaponTimers.laser = Math.max(1, Math.round(wCfg.baseCooldown / lvlData.shotsPerSec));
+        // FUSION 1: CRYO MACHINE (Laser 6B + Arctic Bullet 6A)
+        // Laser yang ditembakkan berubah menjadi Arctic Bullet beruntun cepat
+        else if (playerFusions.cryoMachine) {
+            const branches = lvlData.branches;
+            const spread = lvlData.spread;
+            const speed = lvlData.speed;
+            const arcCfg = GAME_CONFIG.weapons.arctic;
+            const arcLvl = arcCfg.levels['6a'];
+
+            for (let i = 0; i < branches; i++) {
+                let vx = 0;
+                let vy = -speed;
+                if (branches > 1 && spread > 0) {
+                    const angle = -Math.PI / 2 + (i - (branches - 1) / 2) * (spread / (branches - 1) * 2);
+                    vx = Math.cos(angle) * speed;
+                    vy = Math.sin(angle) * speed;
+                }
+                projectiles.push({
+                    kind: 'arctic',
+                    isCryoMachine: true,
+                    x: player.x,
+                    y: player.y - 28,
+                    vx,
+                    vy,
+                    atk: wCfg.baseAtk + 5,
+                    slow: arcLvl.slow,
+                    duration: arcCfg.freezeDuration,
+                    cd: arcCfg.freezeCd,
+                    color: '#38bdf8'
+                });
+            }
+            weaponTimers.laser = Math.max(1, Math.round(wCfg.baseCooldown / lvlData.shotsPerSec));
+        }
+        // Laser Normal
+        else {
+            const branches = lvlData.branches;
+            const spread = lvlData.spread;
+            const speed = lvlData.speed;
+
+            for (let i = 0; i < branches; i++) {
+                let vx = 0;
+                let vy = -speed;
+                if (branches > 1 && spread > 0) {
+                    const angle = -Math.PI / 2 + (i - (branches - 1) / 2) * (spread / (branches - 1) * 2);
+                    vx = Math.cos(angle) * speed;
+                    vy = Math.sin(angle) * speed;
+                }
+                projectiles.push({
+                    kind: 'laser',
+                    x: player.x,
+                    y: player.y - 28,
+                    vx,
+                    vy,
+                    atk: wCfg.baseAtk,
+                    color: wCfg.color
+                });
+            }
+            weaponTimers.laser = Math.max(1, Math.round(wCfg.baseCooldown / lvlData.shotsPerSec));
+        }
     }
 
     // 2. HE CANNON
@@ -478,7 +594,7 @@ function fireActiveWeapons() {
             atk: wCfg.baseAtk,
             radius: wCfg.explosionRadius,
             lvlData,
-            color: wCfg.color
+            color: playerFusions.timeStop ? '#60a5fa' : wCfg.color
         });
         weaponTimers.he = wCfg.baseCooldown;
     }
@@ -538,7 +654,7 @@ function fireActiveWeapons() {
         }
     }
 
-    // 4. ARCTIC BULLET (Peluru Es Utama + Cabang A Homing Seeker + Cabang B Shield)
+    // 4. ARCTIC BULLET (Peluru Es Utama + Cabang A Homing Seeker + Cabang B Shield + Cryo Machine 2 Seeker)
     if (playerSkills.arctic) {
         const wCfg = GAME_CONFIG.weapons.arctic;
         const lvlData = wCfg.levels[playerSkills.arctic];
@@ -560,28 +676,37 @@ function fireActiveWeapons() {
             weaponTimers.arctic = wCfg.baseCooldown;
         }
 
-        // Cabang A: Homing Ice Shard setiap 2 detik
+        // Cabang A: Homing Ice Shard (Fusion Cryo Machine: bertambah menjadi 2 projectile pelacak)
         if (lvlData.seekerIntervalSec && weaponTimers.arcticSeeker <= 0) {
-            const target = findNearestTarget(player.x, player.y);
-            if (target) {
-                const angle = Math.atan2(target.y - (player.y - 24), target.x - player.x);
-                const speed = 9.5;
-                projectiles.push({
-                    kind: 'arctic_seeker',
-                    target,
-                    speed,
-                    x: player.x,
-                    y: player.y - 24,
-                    vx: Math.cos(angle) * speed,
-                    vy: Math.sin(angle) * speed,
-                    atk: lvlData.atk * lvlData.seekerDmgMult,
-                    slow: lvlData.slow,
-                    duration: wCfg.freezeDuration,
-                    cd: wCfg.freezeCd,
-                    color: '#22d3ee'
-                });
-                weaponTimers.arcticSeeker = Math.round(lvlData.seekerIntervalSec * 60);
+            const seekerCount = playerFusions.cryoMachine ? 2 : 1;
+            const allTargets = getAllActiveTargets().sort((a, b) => 
+                Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y)
+            );
+
+            for (let k = 0; k < seekerCount; k++) {
+                const target = allTargets[k] || allTargets[0];
+                if (target) {
+                    const baseAngle = Math.atan2(target.y - (player.y - 24), target.x - player.x);
+                    const angleOffset = seekerCount > 1 ? (k === 0 ? -0.22 : 0.22) : 0;
+                    const finalAngle = baseAngle + angleOffset;
+                    const speed = 9.5;
+                    projectiles.push({
+                        kind: 'arctic_seeker',
+                        target,
+                        speed,
+                        x: player.x + (k === 0 ? -10 : 10),
+                        y: player.y - 24,
+                        vx: Math.cos(finalAngle) * speed,
+                        vy: Math.sin(finalAngle) * speed,
+                        atk: lvlData.atk * lvlData.seekerDmgMult,
+                        slow: lvlData.slow,
+                        duration: wCfg.freezeDuration,
+                        cd: wCfg.freezeCd,
+                        color: playerFusions.cryoMachine ? '#38bdf8' : '#22d3ee'
+                    });
+                }
             }
+            weaponTimers.arcticSeeker = Math.round(lvlData.seekerIntervalSec * 60);
         }
 
         // Cabang B: Regenerasi Shield setiap 60 / 50 detik (tidak menumpuk, me-refresh)
@@ -593,6 +718,60 @@ function fireActiveWeapons() {
                 createExplosion(player.x, player.y, ['#67e8f9', '#ffffff'], 14);
             }
         }
+    }
+
+    // 5. SHOCK WAVE (Kipas dorong musuh atau Pusaran tarik musuh ke pusat)
+    if (playerSkills.shockwave && weaponTimers.shockwave <= 0) {
+        const swCfg = GAME_CONFIG.weapons.shockwave;
+        const swLvl = swCfg.levels[playerSkills.shockwave];
+
+        if (swLvl.isVortex) {
+            // Evolusi Cabang A: Pusaran acak menerjang ke depan & menarik musuh
+            const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.72;
+            const speed = 4.2;
+            projectiles.push({
+                kind: 'shockwave_vortex',
+                x: player.x,
+                y: player.y - 24,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                atk: swLvl.atk,
+                vortexSize: swLvl.vortexSize || 1.0,
+                radius: 40 * (swLvl.vortexSize || 1.0),
+                pullRadius: swLvl.pullRadius || 135,
+                pullPower: swLvl.pullPower || 3.8,
+                life: 140,
+                damageTimer: 0,
+                spinAngle: 0,
+                color: swCfg.color
+            });
+            createExplosion(player.x, player.y - 20, ['#c084fc', '#d8b4fe'], 6);
+        } else {
+            // Gelombang Kipas (Level 1-3: 1 gelombang, Level 4B & 5B: 2 gelombang, Level 6B: 3 gelombang)
+            const waveCount = swLvl.waves || 1;
+            const spreadAngles = waveCount === 1 ? [0] : (waveCount === 2 ? [-0.15, 0.15] : [-0.25, 0, 0.25]);
+
+            for (let w = 0; w < waveCount; w++) {
+                const angle = -Math.PI / 2 + spreadAngles[w];
+                const speed = 8.5;
+                projectiles.push({
+                    kind: 'shockwave_fan',
+                    x: player.x,
+                    y: player.y - 22,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    atk: swLvl.atk,
+                    sizeMult: swLvl.sizeMult || 1.0,
+                    knockback: swLvl.knockback || 22,
+                    arcWidth: 74 * (swLvl.sizeMult || 1.0),
+                    hitTargets: [],
+                    life: 65,
+                    color: swCfg.color
+                });
+            }
+            createExplosion(player.x, player.y - 20, ['#c084fc', '#e879f9', '#ffffff'], 8);
+        }
+        weaponTimers.shockwave = swCfg.baseCooldown;
     }
 }
 
@@ -611,6 +790,14 @@ function spawnFloatingText(x, y, text, color = '#ffffff', size = 13) {
 }
 
 function applyDamageToTarget(target, amount, color = '#ffffff', isCrit = false) {
+    // Boss kebal terhadap semua damage selama 3 detik awal (animasi masuk)
+    if (target === boss && boss && boss.introTimer > 0) {
+        target.hitFlash = 3;
+        spawnFloatingText(target.x, target.y - 20, 'IMMUNE', '#facc15', 13);
+        createExplosion(target.x, target.y, ['#facc15', '#ffffff'], 4);
+        return;
+    }
+
     target.hp -= amount;
     target.hitFlash = 4;
     const label = isCrit ? `${Math.round(amount)}!` : `${Math.round(amount)}`;
@@ -618,6 +805,7 @@ function applyDamageToTarget(target, amount, color = '#ffffff', isCrit = false) 
 }
 
 function applyFreezeToTarget(target, slowAmount, durationSec, cdSec) {
+    if (target === boss && boss && boss.introTimer > 0) return;
     if (!target.status) updateStatusEffects(target);
     if (target.status.freezeCdTimer <= 0) {
         target.status.slowFactor = Math.max(target.status.slowFactor || 0, slowAmount);
@@ -637,13 +825,17 @@ function updateStatusEffects(target) {
             freezeAccumulated: 0,
             freezeCdTimer: 0,
             shatterCdTimer: 0,
-            slowFactor: 0
+            slowFactor: 0,
+            timeStopTimer: 0,
+            timeStopCdTimer: 0
         };
     }
     const st = target.status;
 
     if (st.freezeCdTimer > 0) st.freezeCdTimer--;
     if (st.shatterCdTimer > 0) st.shatterCdTimer--;
+    if (st.timeStopCdTimer > 0) st.timeStopCdTimer--;
+    if (st.timeStopTimer > 0) st.timeStopTimer--;
 
     if (st.burnTimer > 0) {
         st.burnTimer--;
@@ -679,12 +871,23 @@ function updateStatusEffects(target) {
 
 function triggerHeExplosion(proj, directTarget) {
     const lvl = proj.lvlData;
-    createExplosion(proj.x, proj.y, ['#f97316', '#facc15', '#ef4444'], 22);
-    screenShake = Math.max(screenShake, 5);
+    const isTimeStop = playerFusions.timeStop;
+    const blastRadius = isTimeStop ? proj.radius * 1.55 : proj.radius;
+
+    if (proj.isDoom) {
+        createExplosion(proj.x, proj.y, ['#ef4444', '#f97316', '#facc15', '#ffffff'], 28);
+        screenShake = Math.max(screenShake, 7);
+    } else if (isTimeStop) {
+        createExplosion(proj.x, proj.y, ['#3b82f6', '#60a5fa', '#93c5fd', '#ffffff'], 30);
+        screenShake = Math.max(screenShake, 7);
+    } else {
+        createExplosion(proj.x, proj.y, ['#f97316', '#facc15', '#ef4444'], 22);
+        screenShake = Math.max(screenShake, 5);
+    }
 
     for (const target of getAllActiveTargets()) {
         const dist = Math.hypot(target.x - proj.x, target.y - proj.y);
-        const hitRange = proj.radius + (target.width * 0.35);
+        const hitRange = blastRadius + (target.width * 0.35);
 
         if (target === directTarget || dist <= hitRange) {
             const isCrit = Math.random() < lvl.critRate;
@@ -692,6 +895,16 @@ function triggerHeExplosion(proj, directTarget) {
             applyDamageToTarget(target, finalDmg, isCrit ? '#facc15' : '#fdba74', isCrit);
 
             if (!target.status) updateStatusEffects(target);
+
+            // FUSION 2: TIME STOP (HE 6B + Arctic 6A)
+            // Ledakan berarea luas menghentikan musuh 3 detik (boss 1.5 detik), CD 4 detik
+            if (isTimeStop && target.status.timeStopCdTimer <= 0) {
+                const isBoss = (target === boss);
+                const durationSec = isBoss ? 1.5 : 3.0;
+                target.status.timeStopTimer = Math.round(durationSec * 60);
+                target.status.timeStopCdTimer = Math.round(4.0 * 60);
+                spawnFloatingText(target.x, target.y - 32, isBoss ? 'TIME STOP (1.5s)!' : 'TIME STOP (3s)!', '#60a5fa', 14);
+            }
 
             if (lvl.burnPct) {
                 target.status.burnDps = proj.atk * lvl.burnPct;
@@ -748,10 +961,11 @@ function spawnBoss() {
         vx: bCfg.baseSpeedX + (wave - 1) * bCfg.speedIncrementPerWave,
         hp: totalHp,
         maxHp: totalHp,
-        attackTimer: 60,
+        attackTimer: 180, // Mulai serang setelah animasi masuk 3 detik
         patternIndex: 0,
         hitFlash: 0,
-        status: null
+        status: null,
+        introTimer: 180 // Immune terhadap semua damage pada 3 detik awal (180 frame)
     };
 }
 
@@ -771,12 +985,12 @@ function createExplosion(x, y, colors, count = 16) {
 }
 
 function damagePlayer() {
-    if (player.invulnTimer > 0) return;
+    if (player.godMode || player.invulnTimer > 0) return;
 
     // Cek Shield dari Arctic Bullet Cabang B terlebih dahulu
     if (player.hasShield) {
         player.hasShield = false;
-        player.invulnTimer = 45;
+        player.invulnTimer = 60; // 1.0 detik immune
         screenShake = 6;
         spawnFloatingText(player.x, player.y - 30, 'BLOCKED!', '#67e8f9', 14);
         createExplosion(player.x, player.y, ['#67e8f9', '#ffffff'], 22);
@@ -784,7 +998,7 @@ function damagePlayer() {
     }
 
     player.hp--;
-    player.invulnTimer = GAME_CONFIG.player.invulnDuration;
+    player.invulnTimer = 60; // 1.0 detik immune terhadap semua damage
     screenShake = 12;
     createExplosion(player.x, player.y, ['#38bdf8', '#facc15', '#ffffff'], 20);
     if (player.hp <= 0) {
@@ -849,6 +1063,7 @@ function update() {
     if (weaponTimers.arctic > 0) weaponTimers.arctic--;
     if (weaponTimers.arcticSeeker > 0) weaponTimers.arcticSeeker--;
     if (weaponTimers.arcticShield > 0) weaponTimers.arcticShield--;
+    if (weaponTimers.shockwave > 0) weaponTimers.shockwave--;
 
     fireActiveWeapons();
 
@@ -877,14 +1092,80 @@ function update() {
         }
     }
 
-    // Update Proyektil (termasuk homing untuk Arctic Seeker)
+    // Update Proyektil (termasuk homing Arctic Seeker & Shockwave)
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
+
         if (p.kind === 'arctic_seeker' && p.target && p.target.hp > 0) {
             const angle = Math.atan2(p.target.y - p.y, p.target.x - p.x);
             p.vx = Math.cos(angle) * p.speed;
             p.vy = Math.sin(angle) * p.speed;
+        } else if (p.kind === 'shockwave_vortex') {
+            p.life--;
+            p.spinAngle += 0.22;
+            p.damageTimer++;
+
+            // Pantul di batas kiri/kanan kanvas
+            if (p.x < 30 || p.x > canvas.width - 30) p.vx *= -1;
+
+            // Efek hisapan (Pull) terhadap semua musuh selain boss
+            for (const t of getAllActiveTargets()) {
+                if (t !== boss) {
+                    const dx = p.x - t.x;
+                    const dy = p.y - t.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > 6 && dist < p.pullRadius) {
+                        const pullFactor = (1 - dist / p.pullRadius) * p.pullPower;
+                        t.x += (dx / dist) * pullFactor;
+                        t.y += (dy / dist) * pullFactor;
+                    }
+                }
+            }
+
+            // Damage berkala setiap 14 frame untuk musuh di dalam pusaran
+            if (p.damageTimer % 14 === 0) {
+                for (const t of getAllActiveTargets()) {
+                    const dist = Math.hypot(t.x - p.x, t.y - p.y);
+                    if (dist < p.radius + t.width * 0.35) {
+                        applyDamageToTarget(t, Math.round(p.atk * 0.35), '#d8b4fe', false);
+                        createExplosion(t.x, t.y, ['#c084fc', '#ffffff'], 3);
+                    }
+                }
+            }
+
+            if (p.life <= 0) {
+                createExplosion(p.x, p.y, ['#c084fc', '#e879f9', '#ffffff'], 16);
+                projectiles.splice(i, 1);
+                continue;
+            }
+        } else if (p.kind === 'shockwave_fan') {
+            p.life--;
+
+            // Cek tabrakan menembus musuh (Piercing Fan Wave)
+            for (const t of getAllActiveTargets()) {
+                const dist = Math.hypot(t.x - p.x, t.y - p.y);
+                const hitRange = (p.arcWidth * 0.55) + (t.width * 0.35);
+
+                if (dist < hitRange && !p.hitTargets.includes(t)) {
+                    p.hitTargets.push(t);
+                    applyDamageToTarget(t, p.atk, '#c084fc', false);
+                    createExplosion(t.x, t.y, ['#c084fc', '#e879f9', '#ffffff'], 6);
+
+                    // Mendorong musuh biasa (selain boss)
+                    if (t !== boss) {
+                        t.y = Math.max(-20, t.y - p.knockback);
+                        t.vy = Math.max(0.4, t.vy * 0.6);
+                        spawnFloatingText(t.x, t.y - 18, 'PUSH!', '#d8b4fe', 11);
+                    }
+                }
+            }
+
+            if (p.life <= 0) {
+                projectiles.splice(i, 1);
+                continue;
+            }
         }
+
         p.x += p.vx;
         p.y += p.vy;
         if (p.y < -30 || p.y > canvas.height + 30 || p.x < -30 || p.x > canvas.width + 30) {
@@ -897,21 +1178,27 @@ function update() {
         const e = enemies[i];
         updateStatusEffects(e);
 
-        const speedMult = 1 - (e.status.slowFactor || 0);
-        e.y += e.vy * speedMult;
-        e.x += e.vx * speedMult;
-        if (e.x < 35 || e.x > canvas.width - 35) e.vx *= -1;
-        if (e.hitFlash > 0) e.hitFlash--;
+        const isTimeStopped = (e.status && e.status.timeStopTimer > 0);
+        if (isTimeStopped) {
+            // TIME STOP: Musuh berhenti bergerak dan tidak menembak
+            if (e.hitFlash > 0) e.hitFlash--;
+        } else {
+            const speedMult = 1 - (e.status.slowFactor || 0);
+            e.y += e.vy * speedMult;
+            e.x += e.vx * speedMult;
+            if (e.x < 35 || e.x > canvas.width - 35) e.vx *= -1;
+            if (e.hitFlash > 0) e.hitFlash--;
 
-        if (e.cfg.canShoot) {
-            e.shootTimer -= speedMult;
-            if (e.shootTimer <= 0 && e.y > 50 && e.y < canvas.height - 200) {
-                enemyBullets.push({
-                    x: e.x, y: e.y + 24, vx: 0,
-                    vy: (e.cfg.bulletSpeed + (wave - 1) * 0.2) * speedMult,
-                    r: 5, color: '#fb7185'
-                });
-                e.shootTimer = Math.max(55, e.cfg.shootCooldown - wave * 5);
+            if (e.cfg.canShoot) {
+                e.shootTimer -= speedMult;
+                if (e.shootTimer <= 0 && e.y > 50 && e.y < canvas.height - 200) {
+                    enemyBullets.push({
+                        x: e.x, y: e.y + 24, vx: 0,
+                        vy: (e.cfg.bulletSpeed + (wave - 1) * 0.2) * speedMult,
+                        r: 5, color: '#fb7185'
+                    });
+                    e.shootTimer = Math.max(55, e.cfg.shootCooldown - wave * 5);
+                }
             }
         }
 
@@ -919,6 +1206,9 @@ function update() {
         const hitH = e.height * 0.38;
         for (let j = projectiles.length - 1; j >= 0; j--) {
             const p = projectiles[j];
+            // Gelombang kipas & pusaran menembus musuh, tidak hancur saat menabrak
+            if (p.kind === 'shockwave_fan' || p.kind === 'shockwave_vortex') continue;
+
             if (Math.abs(p.x - e.x) < hitW && Math.abs(p.y - e.y) < hitH) {
                 projectiles.splice(j, 1);
                 handleProjectileImpact(p, e);
@@ -952,46 +1242,55 @@ function update() {
     if (gameState === 'BOSS_FIGHT' && boss) {
         updateStatusEffects(boss);
         const bCfg = GAME_CONFIG.boss;
-        const bSpeedMult = 1 - (boss.status.slowFactor || 0);
+        if (boss.introTimer > 0) boss.introTimer--;
 
-        if (boss.y < boss.targetY) {
-            boss.y += 1.5;
+        const isBossTimeStopped = (boss.status && boss.status.timeStopTimer > 0);
+
+        if (isBossTimeStopped) {
+            // Boss berhenti total selama Time Stop
+            if (boss.hitFlash > 0) boss.hitFlash--;
         } else {
-            boss.x += boss.vx * bSpeedMult;
-            const margin = boss.width * 0.45;
-            if (boss.x < margin || boss.x > canvas.width - margin) boss.vx *= -1;
+            const bSpeedMult = 1 - (boss.status.slowFactor || 0);
 
-            boss.attackTimer -= bSpeedMult;
-            const isEnraged = boss.hp < boss.maxHp * 0.5;
-            if (boss.attackTimer <= 0) {
-                const bSpeed = (bCfg.bulletSpeed + (wave - 1) * bCfg.bulletSpeedIncrement) * bSpeedMult;
-                if (boss.patternIndex % 2 === 0) {
-                    const count = isEnraged ? 5 : 3;
-                    const spread = 0.24;
-                    const startAngle = Math.PI / 2 - ((count - 1) * spread) / 2;
-                    for (let k = 0; k < count; k++) {
-                        const ang = startAngle + k * spread;
-                        enemyBullets.push({
-                            x: boss.x, y: boss.y + boss.height * 0.35,
-                            vx: Math.cos(ang) * bSpeed, vy: Math.sin(ang) * bSpeed,
-                            r: 6, color: '#a855f7'
+            if (boss.y < boss.targetY) {
+                boss.y += 1.5;
+            } else {
+                boss.x += boss.vx * bSpeedMult;
+                const margin = boss.width * 0.45;
+                if (boss.x < margin || boss.x > canvas.width - margin) boss.vx *= -1;
+
+                boss.attackTimer -= bSpeedMult;
+                const isEnraged = boss.hp < boss.maxHp * 0.5;
+                if (boss.attackTimer <= 0) {
+                    const bSpeed = (bCfg.bulletSpeed + (wave - 1) * bCfg.bulletSpeedIncrement) * bSpeedMult;
+                    if (boss.patternIndex % 2 === 0) {
+                        const count = isEnraged ? 5 : 3;
+                        const spread = 0.24;
+                        const startAngle = Math.PI / 2 - ((count - 1) * spread) / 2;
+                        for (let k = 0; k < count; k++) {
+                            const ang = startAngle + k * spread;
+                            enemyBullets.push({
+                                x: boss.x, y: boss.y + boss.height * 0.35,
+                                vx: Math.cos(ang) * bSpeed, vy: Math.sin(ang) * bSpeed,
+                                r: 6, color: '#a855f7'
+                            });
+                        }
+                    } else {
+                        [-55, 55].forEach(offsetX => {
+                            const bx = boss.x + offsetX;
+                            const by = boss.y + 15;
+                            const angle = Math.atan2(player.y - by, player.x - bx);
+                            enemyBullets.push({
+                                x: bx, y: by,
+                                vx: Math.cos(angle) * (bSpeed + 0.4), vy: Math.sin(angle) * (bSpeed + 0.4),
+                                r: 5.5, color: '#f59e0b'
+                            });
                         });
                     }
-                } else {
-                    [-55, 55].forEach(offsetX => {
-                        const bx = boss.x + offsetX;
-                        const by = boss.y + 15;
-                        const angle = Math.atan2(player.y - by, player.x - bx);
-                        enemyBullets.push({
-                            x: bx, y: by,
-                            vx: Math.cos(angle) * (bSpeed + 0.4), vy: Math.sin(angle) * (bSpeed + 0.4),
-                            r: 5.5, color: '#f59e0b'
-                        });
-                    });
+                    boss.patternIndex++;
+                    const cd = isEnraged ? bCfg.enrageCooldown : bCfg.attackCooldown;
+                    boss.attackTimer = Math.max(35, cd - (wave - 1) * 4);
                 }
-                boss.patternIndex++;
-                const cd = isEnraged ? bCfg.enrageCooldown : bCfg.attackCooldown;
-                boss.attackTimer = Math.max(35, cd - (wave - 1) * 4);
             }
         }
 
@@ -999,8 +1298,16 @@ function update() {
 
         const bHitW = boss.width * 0.4;
         const bHitH = boss.height * 0.35;
+
+        // Tabrakan fisik Player menabrak Boss (player terkena hit)
+        if (boss && Math.abs(boss.x - player.x) < (bHitW + player.width * 0.35) && Math.abs(boss.y - player.y) < (bHitH + player.height * 0.35)) {
+            damagePlayer();
+        }
+
         for (let j = projectiles.length - 1; j >= 0; j--) {
             const p = projectiles[j];
+            if (p.kind === 'shockwave_fan' || p.kind === 'shockwave_vortex') continue;
+
             if (Math.abs(p.x - boss.x) < bHitW && Math.abs(p.y - boss.y) < bHitH) {
                 projectiles.splice(j, 1);
                 handleProjectileImpact(p, boss);
@@ -1074,6 +1381,8 @@ function drawSpriteEntity(entity, img, x, y, w, h, rotateDown = false, fallbackC
 
     if (entity && entity.hitFlash > 0) {
         ctx.filter = 'brightness(2.5)';
+    } else if (entity && entity.status && entity.status.timeStopTimer > 0) {
+        ctx.filter = 'hue-rotate(200deg) saturate(0.4) brightness(1.7)';
     } else if (entity && entity.status && entity.status.freezeTimer > 0) {
         ctx.filter = 'hue-rotate(170deg) saturate(2) brightness(1.2)';
     }
@@ -1090,6 +1399,16 @@ function drawSpriteEntity(entity, img, x, y, w, h, rotateDown = false, fallbackC
         ctx.closePath();
         ctx.fill();
     }
+
+    // Visual Lingkaran Waktu jika sedang terkena Time Stop
+    if (entity && entity.status && entity.status.timeStopTimer > 0) {
+        ctx.strokeStyle = '#60a5fa';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.max(w, h) * 0.58 + Math.sin(frameCount * 0.2) * 2, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
     ctx.restore();
 }
 
@@ -1146,23 +1465,82 @@ function render() {
         ctx.restore();
     }
 
-    // Proyektil Pemain (Laser, HE, Arctic, Arctic Seeker)
+    // Proyektil Pemain (Laser, HE, Arctic, Arctic Seeker, Shockwave Fan & Vortex)
     for (const p of projectiles) {
-        if (p.kind === 'he') {
-            ctx.fillStyle = '#f97316';
+        if (p.kind === 'shockwave_fan') {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            const angle = Math.atan2(p.vy, p.vx) + Math.PI / 2;
+            ctx.rotate(angle);
+            ctx.strokeStyle = '#c084fc';
+            ctx.shadowColor = '#d8b4fe';
+            ctx.shadowBlur = 10;
+            ctx.lineWidth = 4;
             ctx.beginPath();
-            ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#fef08a';
+            const rad = p.arcWidth * 0.6;
+            ctx.arc(0, 0, rad, -Math.PI * 0.78, -Math.PI * 0.22);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+            ctx.arc(0, 3, rad * 0.88, -Math.PI * 0.72, -Math.PI * 0.28);
+            ctx.stroke();
+            ctx.restore();
+        } else if (p.kind === 'shockwave_vortex') {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.spinAngle);
+            ctx.strokeStyle = '#c084fc';
+            ctx.shadowColor = '#e879f9';
+            ctx.shadowBlur = 12;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            for (let a = 0; a < Math.PI * 4; a += 0.25) {
+                const r = (a / (Math.PI * 4)) * p.radius;
+                const px = Math.cos(a) * r;
+                const py = Math.sin(a) * r;
+                if (a === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+
+            ctx.fillStyle = '#f5d0fe';
+            ctx.beginPath();
+            ctx.arc(0, 0, 6, 0, Math.PI * 2);
             ctx.fill();
+            ctx.restore();
+        } else if (p.kind === 'he') {
+            ctx.save();
+            if (p.isDoom) {
+                // Peluru Doom Nova Hellfire membara
+                ctx.fillStyle = '#ef4444';
+                ctx.shadowColor = '#f97316';
+                ctx.shadowBlur = 14;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 9, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#fef08a';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#fef08a';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
         } else if (p.kind === 'arctic' || p.kind === 'arctic_seeker') {
             ctx.save();
             ctx.translate(p.x, p.y);
             ctx.fillStyle = p.color;
             ctx.beginPath();
-            const r = p.kind === 'arctic_seeker' ? 7 : 5;
+            const r = p.kind === 'arctic_seeker' ? 7 : (p.isCryoMachine ? 6.5 : 5);
             ctx.moveTo(0, -r * 1.6);
             ctx.lineTo(r, 0);
             ctx.lineTo(0, r * 1.6);
@@ -1198,6 +1576,31 @@ function render() {
     // Boss
     if (boss) {
         drawSpriteEntity(boss, assets.boss, boss.x, boss.y, boss.width, boss.height, true, '#7e22ce');
+
+        // Visual Shield Kebal 3 Detik Awal saat animasi masuk
+        if (boss.introTimer > 0) {
+            ctx.save();
+            ctx.translate(boss.x, boss.y);
+            const shieldRadius = Math.max(boss.width, boss.height) * 0.52 + Math.sin(frameCount * 0.15) * 4;
+            ctx.strokeStyle = '#facc15';
+            ctx.fillStyle = 'rgba(250, 204, 21, 0.14)';
+            ctx.lineWidth = 3;
+            ctx.shadowColor = '#fde047';
+            ctx.shadowBlur = 18;
+            ctx.beginPath();
+            ctx.arc(0, 0, shieldRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Label Status Kebal
+            const secsLeft = (boss.introTimer / 60).toFixed(1);
+            ctx.fillStyle = '#fde047';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'center';
+            ctx.shadowBlur = 8;
+            ctx.fillText(`IMMUNE (${secsLeft}s)`, 0, -boss.height * 0.52);
+            ctx.restore();
+        }
     }
 
     // Player + Shield Visual
@@ -1300,6 +1703,11 @@ function render() {
     if (playerSkills.he) activeTags.push(`HE:${playerSkills.he.toUpperCase()}`);
     if (playerSkills.lightning) activeTags.push(`LGT:${playerSkills.lightning.toUpperCase()}`);
     if (playerSkills.arctic) activeTags.push(`ARC:${playerSkills.arctic.toUpperCase()}`);
+    if (playerSkills.shockwave) activeTags.push(`SHK:${playerSkills.shockwave.toUpperCase()}`);
+
+    if (playerFusions.cryoMachine) activeTags.push('★CRYO');
+    if (playerFusions.timeStop) activeTags.push('★TIME');
+    if (playerFusions.doom) activeTags.push('★DOOM');
 
     ctx.fillStyle = '#38bdf8';
     ctx.font = '10px monospace';
@@ -1380,26 +1788,53 @@ function render() {
 
         skillChoices.forEach((choice, idx) => {
             const cardY = 230 + idx * 125;
-            ctx.fillStyle = '#0f172a';
-            ctx.fillRect(40, cardY, canvas.width - 80, 105);
-            ctx.strokeStyle = choice.color;
-            ctx.lineWidth = choice.isEvo ? 3 : 2;
-            ctx.strokeRect(40, cardY, canvas.width - 80, 105);
+            ctx.save();
+
+            if (choice.isFusion) {
+                // Highlight Khusus Senjata Fusion (Border neon menyala, background gradasi elegan)
+                const pulse = Math.sin(frameCount * 0.15) * 4;
+                ctx.fillStyle = '#1e1138';
+                ctx.fillRect(38, cardY - 2, canvas.width - 76, 109);
+
+                ctx.strokeStyle = '#f43f5e';
+                ctx.shadowColor = '#ec4899';
+                ctx.shadowBlur = 14 + pulse;
+                ctx.lineWidth = 3.5;
+                ctx.strokeRect(38, cardY - 2, canvas.width - 76, 109);
+
+                // Badge Emas Khusus di pojok kanan kartu
+                ctx.fillStyle = '#facc15';
+                ctx.font = 'bold 9px monospace';
+                ctx.textAlign = 'right';
+                ctx.shadowBlur = 6;
+                ctx.fillText('★ FUSION LEGENDARY ★', canvas.width - 48, cardY + 18);
+            } else {
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(40, cardY, canvas.width - 80, 105);
+                ctx.strokeStyle = choice.color;
+                ctx.lineWidth = choice.isEvo ? 3 : 2;
+                ctx.strokeRect(40, cardY, canvas.width - 80, 105);
+            }
 
             ctx.textAlign = 'left';
             ctx.fillStyle = choice.color;
             ctx.font = 'bold 15px monospace';
-            ctx.fillText(`[${idx + 1}] ${choice.title}`, 56, cardY + 32);
+            ctx.fillText(`[${idx + 1}] ${choice.title}`, 56, cardY + 30);
 
-            if (choice.isEvo) {
+            if (choice.isFusion) {
+                ctx.fillStyle = '#fb7185';
+                ctx.font = 'bold 10px monospace';
+                ctx.fillText(`★ SYARAT: ${choice.reqText}`, 56, cardY + 49);
+            } else if (choice.isEvo) {
                 ctx.fillStyle = '#facc15';
                 ctx.font = 'bold 11px monospace';
-                ctx.fillText('★ EVOLUSI CABANG', 56, cardY + 52);
+                ctx.fillText('★ EVOLUSI CABANG', 56, cardY + 50);
             }
 
             ctx.fillStyle = '#e2e8f0';
             ctx.font = '11px monospace';
-            ctx.fillText(choice.desc, 56, cardY + (choice.isEvo ? 76 : 64));
+            ctx.fillText(choice.desc, 56, cardY + (choice.isEvo || choice.isFusion ? 72 : 64));
+            ctx.restore();
         });
     }
 
@@ -1455,3 +1890,71 @@ function gameLoop(timestamp) {
 }
 
 requestAnimationFrame(gameLoop);
+
+// ==========================================
+// 9. DEVELOPER API (Untuk diakses oleh devtool.js)
+// ==========================================
+window.GAME_DEV = {
+    getPlayer: () => player,
+    getSkills: () => playerSkills,
+    getFusions: () => playerFusions,
+    setWeaponLevel: (wKey, lvl) => {
+        playerSkills[wKey] = lvl;
+        if (wKey === 'arctic' && (lvl === '4b' || lvl === '5b' || lvl === '6b')) {
+            player.hasShield = true;
+            weaponTimers.arcticShield = 60 * 60;
+        }
+        const name = GAME_CONFIG.weapons[wKey]?.name || wKey;
+        spawnFloatingText(player.x, player.y - 35, `${name}: ${lvl || 'OFF'}`, '#c084fc', 13);
+    },
+    setFusion: (fKey, active = true) => {
+        playerFusions[fKey] = active;
+        const name = GAME_CONFIG.fusions[fKey]?.name || fKey;
+        spawnFloatingText(player.x, player.y - 45, `Fusion ${name}: ${active ? 'ON' : 'OFF'}`, active ? '#06b6d4' : '#ef4444', 14);
+    },
+    setLevel: (lvl) => {
+        playerLevel = lvl;
+        currentExp = 0;
+        expToNextLevel = GAME_CONFIG.leveling.baseExpRequired + (playerLevel - 1) * GAME_CONFIG.leveling.expIncrementPerLvl;
+        spawnFloatingText(player.x, player.y - 35, `Level -> ${lvl}`, '#4ade80', 14);
+    },
+    addExp: (amt) => {
+        addExp(amt);
+    },
+    healFull: () => {
+        player.hp = GAME_CONFIG.player.maxHp;
+        spawnFloatingText(player.x, player.y - 35, 'FULL HEAL!', '#22c55e', 14);
+    },
+    toggleGodMode: () => {
+        player.godMode = !player.godMode;
+        spawnFloatingText(player.x, player.y - 35, `GOD MODE: ${player.godMode ? 'ON' : 'OFF'}`, '#facc15', 14);
+        return player.godMode;
+    },
+    spawnBossNow: () => {
+        if (gameState !== 'BOSS_FIGHT') {
+            gameState = 'BOSS_FIGHT';
+            spawnBoss();
+            spawnFloatingText(player.x, player.y - 45, 'BOSS SPAWNED!', '#f87171', 14);
+        }
+    },
+    clearEnemies: () => {
+        enemies.length = 0;
+        enemyBullets.length = 0;
+        spawnFloatingText(player.x, player.y - 35, 'CLEARED!', '#f43f5e', 13);
+    },
+    triggerSkillCard: () => {
+        pendingLevelUps++;
+        triggerSkillSelection();
+    },
+    getState: () => ({
+        playerLevel,
+        score,
+        wave,
+        gameState,
+        playerSkills,
+        playerFusions,
+        godMode: !!player.godMode,
+        playerHp: player.hp,
+        maxHp: GAME_CONFIG.player.maxHp
+    })
+};

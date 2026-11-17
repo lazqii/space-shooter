@@ -9,7 +9,7 @@ const GAME_CONFIG = {
         height: 64,
         speed: 6,
         maxHp: 5,
-        invulnDuration: 75
+        invulnDuration: 60 // 1.0 detik immune saat terkena hit / naik level
     },
 
     leveling: {
@@ -18,7 +18,7 @@ const GAME_CONFIG = {
     },
 
     drops: {
-        heavyHealChance: 0.18
+        heavyHealChance: 0.11 // Dikurangi sedikit (sebelumnya 0.18)
     },
 
     wave: {
@@ -257,6 +257,87 @@ const GAME_CONFIG = {
                     shieldIntervalSec: 50.0
                 }
             }
+        },
+
+        // 5. SHOCK WAVE
+        shockwave: {
+            id: 'shockwave',
+            name: 'Shock Wave',
+            color: '#c084fc',
+            baseAtk: 15,
+            baseCooldown: 60, // 1.0 detik (Fire rate: 1.0)
+            levels: {
+                1: { desc: 'Gelombang kipas mendorong musuh (selain boss)', atk: 15, sizeMult: 1.0, knockback: 22, waves: 1 },
+                2: { desc: 'Ukuran gelombang +10%, ATK +3 (18 ATK)', atk: 18, sizeMult: 1.10, knockback: 23, waves: 1 },
+                3: { desc: 'Ukuran gelombang +10%, ATK +3 (21 ATK)', atk: 21, sizeMult: 1.20, knockback: 25, waves: 1 },
+                // Percabangan Evolusi Level 4
+                '4a': {
+                    name: 'Shockwave: Vortex (4A)',
+                    desc: 'Pusaran acak ke depan menarik musuh ke pusatnya (24 ATK)',
+                    atk: 24, isVortex: true, vortexSize: 1.0, pullRadius: 130, pullPower: 3.8
+                },
+                '4b': {
+                    name: 'Shockwave: Dual Wave (4B)',
+                    desc: '2 gelombang dilancarkan sekaligus, ATK +7 (28 ATK)',
+                    atk: 28, sizeMult: 1.20, knockback: 26, waves: 2
+                },
+                '5a': {
+                    name: 'Shockwave: Vortex (5A)',
+                    desc: 'ATK pusaran +3 (Total 27 ATK)',
+                    atk: 27, isVortex: true, vortexSize: 1.0, pullRadius: 140, pullPower: 4.5
+                },
+                '5b': {
+                    name: 'Shockwave: Dual Wave (5B)',
+                    desc: 'ATK gelombang ganda +7 (Total 35 ATK)',
+                    atk: 35, sizeMult: 1.20, knockback: 28, waves: 2
+                },
+                '6a': {
+                    name: 'Shockwave: Maelstrom (MAX)',
+                    desc: 'Ukuran pusaran +20%, ATK +3 (Total 30 ATK)',
+                    atk: 30, isVortex: true, vortexSize: 1.20, pullRadius: 165, pullPower: 5.6
+                },
+                '6b': {
+                    name: 'Shockwave: Tsunami (MAX)',
+                    desc: 'Serangan bertambah menjadi 3 gelombang sekaligus (35 ATK)',
+                    atk: 35, sizeMult: 1.20, knockback: 30, waves: 3
+                }
+            }
+        }
+    },
+
+    // ==========================================
+    // DATA SENJATA FUSION (KEDUA SENJATA WAJIB MAX & MIN. LEVEL 15)
+    // ==========================================
+    fusions: {
+        cryoMachine: {
+            id: 'cryoMachine',
+            name: 'Cryo Machine',
+            minPlayerLevel: 15,
+            req: { laser: '6b', arctic: '6a' },
+            reqText: 'Min. Lv.15 + Laser 6B + Arctic Bullet 6A',
+            title: 'Cryo Machine',
+            desc: 'Laser berubah jadi Arctic Bullet cepat & Homing Seeker menjadi 2 peluru',
+            color: '#06b6d4'
+        },
+        timeStop: {
+            id: 'timeStop',
+            name: 'Time Stop',
+            minPlayerLevel: 15,
+            req: { he: '6b', arctic: '6a' },
+            reqText: 'Min. Lv.15 + HE Cannon 6B + Arctic Bullet 6A',
+            title: 'Time Stop',
+            desc: 'Area ledakan HE lebih luas & musuh berhenti total 3 dtk (boss 1.5 dtk, CD 4 dtk)',
+            color: '#3b82f6'
+        },
+        doom: {
+            id: 'doom',
+            name: 'Doom',
+            minPlayerLevel: 15,
+            req: { laser: '6a', he: '6a' },
+            reqText: 'Min. Lv.15 + Laser 6A + HE Cannon 6A',
+            title: 'Doom',
+            desc: 'Tembakan laser digantikan dengan 5 meriam HE Cannon ledakan Hellfire',
+            color: '#ef4444'
         }
     }
 };
