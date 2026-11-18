@@ -73,36 +73,129 @@ function drawFlameThrowerCone() {
 
     const ftCfg = GAME_CONFIG.weapons.flamethrower;
     if (!ftCfg) return;
-    const ftLvl = ftCfg.levels[playerSkills.flamethrower];
+    const curLvl = playerSkills.flamethrower;
+    const ftLvl = ftCfg.levels[curLvl];
     if (!ftLvl) return;
 
-    const coneRange = ftCfg.baseRange * ftLvl.rangeMult;
-    const halfSpread = ftCfg.baseSpread;
-    const startX = player.x, startY = player.y - 26;
+    const isWildfire = ['4b', '5b', '6b'].includes(curLvl);
+    const coneRange = ftCfg.baseRange * (ftLvl.rangeMult || 1.0);
+    const halfSpread = ftCfg.baseSpread * (ftLvl.spreadMult || 1.0);
+    const startX = player.x;
+    const startY = player.y - 26;
+    const t = GAME_STATE.frameCount;
+    const pixelGrid = 4; // Ukuran grid piksel agar tampil tajam bergaya retro
 
     ctx.save();
-    const grad = ctx.createLinearGradient(startX, startY, startX, startY - coneRange);
-    grad.addColorStop(0, 'rgba(254, 240, 138, 0.75)');
-    grad.addColorStop(0.45, 'rgba(249, 115, 22, 0.50)');
-    grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+    ctx.globalCompositeOperation = 'lighter';
 
-    const leftAngle = -Math.PI / 2 - halfSpread;
-    const rightAngle = -Math.PI / 2 + halfSpread;
-    const flicker = Math.sin(GAME_STATE.frameCount * 0.6) * 8;
+    // 1. Pijar dasar (Ambient Glow)
+    const baseGrad = ctx.createRadialGradient(startX, startY, 6, startX, startY - coneRange * 0.45, coneRange);
+    if (isWildfire) {
+        baseGrad.addColorStop(0, 'rgba(224, 242, 254, 0.36)');
+        baseGrad.addColorStop(0.5, 'rgba(56, 189, 248, 0.18)');
+        baseGrad.addColorStop(1, 'rgba(29, 78, 216, 0)');
+    } else {
+        baseGrad.addColorStop(0, 'rgba(254, 240, 138, 0.30)');
+        baseGrad.addColorStop(0.5, 'rgba(249, 115, 22, 0.14)');
+        baseGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+    }
 
-    ctx.fillStyle = grad;
+    ctx.fillStyle = baseGrad;
     ctx.beginPath();
     ctx.moveTo(startX, startY);
-    ctx.arc(startX, startY, coneRange + flicker, leftAngle, rightAngle);
+    ctx.arc(startX, startY, coneRange, -Math.PI / 2 - halfSpread, -Math.PI / 2 + halfSpread);
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = 'rgba(254, 249, 195, 0.42)';
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    ctx.arc(startX, startY, (coneRange + flicker) * 0.58, leftAngle * 0.98, rightAngle * 1.02);
-    ctx.closePath();
-    ctx.fill();
+    // 2. Lidah api bergelombang (3 lapisan dinamis)
+    const layers = isWildfire ? [
+        { color: 'rgba(37, 99, 235, 0.40)', scale: 1.0, amp: 0.08, speed: 0.45 },
+        { color: 'rgba(56, 189, 248, 0.55)', scale: 0.84, amp: 0.06, speed: 0.55 },
+        { color: 'rgba(224, 242, 254, 0.72)', scale: 0.56, amp: 0.04, speed: 0.65 }
+    ] : [
+        { color: 'rgba(239, 68, 68, 0.38)', scale: 1.0, amp: 0.16, speed: 0.35 },
+        { color: 'rgba(249, 115, 22, 0.50)', scale: 0.82, amp: 0.12, speed: 0.45 },
+        { color: 'rgba(254, 240, 138, 0.60)', scale: 0.52, amp: 0.08, speed: 0.55 }
+    ];
+
+    layers.forEach((layer, idx) => {
+        const maxDist = coneRange * layer.scale;
+        const steps = 8;
+        const leftPts = [];
+        const rightPts = [];
+
+        for (let i = 0; i <= steps; i++) {
+            const ratio = i / steps;
+            const dist = ratio * maxDist;
+            const wave = Math.sin(t * layer.speed - ratio * 5 + idx * 1.7) * (layer.amp * ratio);
+            const curHalfSpread = halfSpread * (0.22 + ratio * 0.85);
+
+            const angleL = -Math.PI / 2 - curHalfSpread + wave;
+            const angleR = -Math.PI / 2 + curHalfSpread + wave;
+
+            leftPts.push({
+                x: Math.round((startX + Math.cos(angleL) * dist) / pixelGrid) * pixelGrid,
+                y: Math.round((startY + Math.sin(angleL) * dist) / pixelGrid) * pixelGrid
+            });
+            rightPts.push({
+                x: Math.round((startX + Math.cos(angleR) * dist) / pixelGrid) * pixelGrid,
+                y: Math.round((startY + Math.sin(angleR) * dist) / pixelGrid) * pixelGrid
+            });
+        }
+
+        ctx.fillStyle = layer.color;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        for (const pt of leftPts) ctx.lineTo(pt.x, pt.y);
+        for (let i = rightPts.length - 1; i >= 0; i--) ctx.lineTo(rightPts[i].x, rightPts[i].y);
+        ctx.closePath();
+        ctx.fill();
+    });
+
+    // 3. Partikel kotak piksel (Ember & Plasma Blocks) yang melesat keluar
+    const particleCount = Math.max(24, Math.round(coneRange / 6));
+    const flowSpeed = isWildfire ? 0.08 : 0.055;
+
+    for (let i = 0; i < particleCount; i++) {
+        const rawProgress = t * flowSpeed + i * (1 / particleCount);
+        const progress = rawProgress % 1;
+        const cycle = Math.floor(rawProgress);
+        const dist = progress * coneRange;
+
+        const seed = Math.sin(i * 12.9898 + cycle * 78.233);
+        const wobble = Math.sin(t * 0.25 + i) * (isWildfire ? 0.04 : 0.08) * progress;
+        const angle = -Math.PI / 2 + (seed * halfSpread * 0.94) + wobble;
+
+        // Snap posisi ke grid piksel 4px
+        const px = Math.round((startX + Math.cos(angle) * dist) / pixelGrid) * pixelGrid;
+        const py = Math.round((startY + Math.sin(angle) * dist) / pixelGrid) * pixelGrid;
+
+        // Ukuran kotak kelipatan pixelGrid (16px -> 12px -> 8px -> 4px)
+        const rawSize = (1 - Math.abs(progress - 0.3)) * (12 + halfSpread * 12);
+        const blockSize = Math.max(pixelGrid, Math.round(rawSize / pixelGrid) * pixelGrid);
+        const alpha = (1 - progress) * 0.92;
+
+        if (isWildfire) {
+            if (progress < 0.28) {
+                ctx.fillStyle = `rgba(240, 249, 255, ${alpha})`; // Inti putih plasma
+            } else if (progress < 0.68) {
+                ctx.fillStyle = `rgba(56, 189, 248, ${alpha})`;  // Biru elektrik
+            } else {
+                ctx.fillStyle = `rgba(37, 99, 235, ${alpha * 0.85})`; // Biru pekat
+            }
+        } else {
+            if (progress < 0.28) {
+                ctx.fillStyle = `rgba(254, 249, 195, ${alpha})`; // Inti kuning-putih
+            } else if (progress < 0.68) {
+                ctx.fillStyle = `rgba(249, 115, 22, ${alpha})`;  // Oranye api
+            } else {
+                ctx.fillStyle = `rgba(220, 38, 38, ${alpha * 0.85})`; // Bara merah
+            }
+        }
+
+        ctx.fillRect(px - blockSize / 2, py - blockSize / 2, blockSize, blockSize);
+    }
+
     ctx.restore();
 }
 

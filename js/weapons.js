@@ -269,8 +269,8 @@ function executeFlameThrower(ftLvl, ftCfg) {
         weaponTimers.flameActive--;
         weaponTimers.flameTick++;
 
-        const coneRange = (ftCfg.baseRange || 165) * (ftLvl.rangeMult || 1.0);
-        const halfSpread = ftCfg.baseSpread || 0.42;
+        const coneRange = ftCfg.baseRange * (ftLvl.rangeMult || 1.0);
+        const halfSpread = ftCfg.baseSpread * (ftLvl.spreadMult || 1.0);
 
         if (weaponTimers.flameTick % 15 === 0) {
             for (const t of getAllActiveTargets()) {

@@ -312,53 +312,53 @@ const GAME_CONFIG = {
             levels: {
                 1: {
                     desc: 'Menyemburkan api dalam jarak pendek dan menerapkan efek Burn\nBurn: Membakar musuh 2 damage/0.5 detik selama 2 detik)',
-                    atk: 5, durationSec: 2.0, cooldownSec: 2.0, rangeMult: 1.0,
+                    atk: 5, durationSec: 2.0, cooldownSec: 2.0, rangeMult: 1.0, spreadMult: 1.0,
                     burnDmg: 2, burnDurationSec: 2.0
                 },
                 2: {
                     desc: 'Damage semburan +5 \nEfek Burn meningkat >> 3 dmg/0.5 detik selama 2 detik',
-                    atk: 10, durationSec: 2.0, cooldownSec: 2.0, rangeMult: 1.0,
+                    atk: 10, durationSec: 2.0, cooldownSec: 2.0, rangeMult: 1.0, spreadMult: 1.0,
                     burnDmg: 3, burnDurationSec: 2.0
                 },
                 3: {
                     desc: 'Damage semburan +5 \nDurasi efek Burn meningkat >> 3 dmg/0.5 detik selama 2.5 detik',
-                    atk: 15, durationSec: 2.0, cooldownSec: 2.0, rangeMult: 1.0,
+                    atk: 15, durationSec: 2.0, cooldownSec: 2.0, rangeMult: 1.0, spreadMult: 1.0,
                     burnDmg: 3, burnDurationSec: 2.5
                 },
                 '4a': {
                     name: 'Flame: Pyro Torrent',
-                    desc: 'Durasi semburan meningkat >> 3.5 detik \nJeda antar semburan >> 3 detik',
-                    atk: 15, durationSec: 3.5, cooldownSec: 3.0, rangeMult: 1.0,
+                    desc: 'Area dan durasi semburan meningkat >> 3.5 detik \nJeda antar semburan >> 3 detik',
+                    atk: 15, durationSec: 3.5, cooldownSec: 3.0, rangeMult: 1.0, spreadMult: 1.15,
                     burnDmg: 3, burnDurationSec: 2.5
                 },
                 '4b': {
                     name: 'Flame: Wildfire Jet',
                     desc: 'Area semburan dipersempit, namun jangkauannya diperpanjang \nJeda antar semburan >> 1.5 dtk',
-                    atk: 15, durationSec: 2.0, cooldownSec: 1.5, rangeMult: 2.5,
+                    atk: 15, durationSec: 2.0, cooldownSec: 1.5, rangeMult: 1.15, spreadMult: 0.52,
                     burnDmg: 3, burnDurationSec: 2.5
                 },
                 '5a': {
                     name: 'Flame: Pyro Torrent',
-                    desc: 'Damage semburan +5 \nEfek Burn meningkat >> 15 damage/0.5 detik',
-                    atk: 20, durationSec: 3.5, cooldownSec: 3.0, rangeMult: 1.0,
+                    desc: 'Damage semburan +2 \nEfek Burn meningkat >> 15 damage/0.5 detik',
+                    atk: 17, durationSec: 3.5, cooldownSec: 3.0, rangeMult: 1.0, spreadMult: 1.25,
                     burnDmg: 15, burnDurationSec: 2.5
                 },
                 '5b': {
                     name: 'Flame: Wildfire Jet',
-                    desc: 'Damage semburan +2 \nEfek Burn meningkat >> 8 damage/0.5 detik',
-                    atk: 17, durationSec: 2.0, cooldownSec: 1.5, rangeMult: 2.5,
+                    desc: 'Damage semburan +5 \nEfek Burn meningkat >> 8 damage/0.5 detik',
+                    atk: 20, durationSec: 2.0, cooldownSec: 1.5, rangeMult: 1.25, spreadMult: 0.52,
                     burnDmg: 8, burnDurationSec: 2.5
                 },
                 '6a': {
                     name: 'Flame: Pyro Torrent (MAX)',
-                    desc: 'Damage semburan +15 \nDurasi Burn meningkat >> 4 damage/0.5 detik selama 3 dtk',
-                    atk: 35, durationSec: 3.5, cooldownSec: 3.0, rangeMult: 1.0,
-                    burnDmg: 15, burnDurationSec: 3.0
+                    desc: 'Damage semburan +5 \nEfek dan durasi Burn meningkat >> 16 damage/0.5 detik selama 3 dtk',
+                    atk: 22, durationSec: 3.5, cooldownSec: 3.0, rangeMult: 1.0, spreadMult: 3.0,
+                    burnDmg: 16, burnDurationSec: 3.0
                 },
                 '6b': {
-                    name: 'Flame: Wildfire (MAX)',
-                    desc: 'Damage semburan +5 \nJangkauan semburan meningkat',
-                    atk: 22, durationSec: 2.0, cooldownSec: 1.5, rangeMult: 3.0,
+                    name: 'Flame: Wildfire Jet (MAX)',
+                    desc: 'Damage semburan +15 \nJangkauan semburan meningkat',
+                    atk: 35, durationSec: 2.0, cooldownSec: 1.5, rangeMult: 1.5, spreadMult: 0.4,
                     burnDmg: 8, burnDurationSec: 2.5
                 }
             }
