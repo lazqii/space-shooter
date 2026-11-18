@@ -96,8 +96,10 @@ function isInsideRect(x, y, rect) {
 
 function handleMenuAction(x, y) {
     if (GAME_STATE.gameState === 'START') {
-        startGame();
-        return true;
+        return handleMainMenuClick(x, y);
+    }
+    if (GAME_STATE.gameState === 'PAUSED') {
+        return handlePauseMenuClick(x, y);
     }
     if (GAME_STATE.gameState === 'GAME_OVER') {
         const layout = getGameOverLayout();
@@ -121,8 +123,33 @@ function handleMenuAction(x, y) {
         }
         return true;
     }
+
+    // Cek klik tombol Pause [||] di pojok kanan atas HUD saat bermain
+    if (isInsideRect(x, y, getHudPauseButtonRect())) {
+        togglePauseGame();
+        return true;
+    }
+
     return false;
 }
+
+window.addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+
+    if (e.code === 'Escape' || e.code === 'KeyP') {
+        if (GAME_STATE.gameState === 'START' && GAME_STATE.menuModal) {
+            GAME_STATE.menuModal = null;
+        } else {
+            togglePauseGame();
+        }
+    }
+
+    if (GAME_STATE.gameState === 'SKILL_SELECT') {
+        if (e.code === 'Digit1' && GAME_STATE.skillChoices[0]) applySkillChoice(GAME_STATE.skillChoices[0]);
+        if (e.code === 'Digit2' && GAME_STATE.skillChoices[1]) applySkillChoice(GAME_STATE.skillChoices[1]);
+        if (e.code === 'Digit3' && GAME_STATE.skillChoices[2]) applySkillChoice(GAME_STATE.skillChoices[2]);
+    }
+});
 
 function updateAnalogDrag(x, y) {
     const diffX = x - joystick.baseX;

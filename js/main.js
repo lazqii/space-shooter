@@ -79,7 +79,12 @@ function update() {
 
     if (GAME_STATE.shareFeedbackTimer > 0) GAME_STATE.shareFeedbackTimer--;
 
-    if (GAME_STATE.gameState === 'START' || GAME_STATE.gameState === 'GAME_OVER' || GAME_STATE.gameState === 'SKILL_SELECT') return;
+    if (
+        GAME_STATE.gameState === 'START' ||
+        GAME_STATE.gameState === 'GAME_OVER' ||
+        GAME_STATE.gameState === 'SKILL_SELECT' ||
+        GAME_STATE.gameState === 'PAUSED'
+    ) return;
 
     GAME_STATE.playTimeFrames++;
 

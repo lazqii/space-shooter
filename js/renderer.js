@@ -1,4 +1,4 @@
-// js/renderer.js - Semua Fungsi Gambar Canvas, Efek Visual & HUD
+// js/renderer.js - Semua Fungsi Gambar Canvas, Efek Visual, HUD, Main Menu & Pause
 
 function drawSpriteEntity(entity, img, x, y, w, h, rotateDown = false, fallbackColor = '#38bdf8') {
     ctx.save();
@@ -107,6 +107,15 @@ function drawFlameThrowerCone() {
 }
 
 function renderHUDAndOverlays() {
+    // 1. Jika sedang di layar START, langsung tampilkan Main Menu (tanpa HUD pertempuran)
+    if (GAME_STATE.gameState === 'START') {
+        if (typeof renderMainMenuScreen === 'function') {
+            renderMainMenuScreen();
+        }
+        return;
+    }
+
+    // 2. HUD Atas saat permainan berlangsung
     ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
     ctx.fillRect(0, 0, canvas.width, 64);
 
@@ -139,30 +148,47 @@ function renderHUDAndOverlays() {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#facc15';
     ctx.font = 'bold 14px monospace';
-    ctx.fillText(`WAVE ${GAME_STATE.wave}`, canvas.width / 2 + 30, 20);
+    ctx.fillText(`WAVE ${GAME_STATE.wave}`, canvas.width / 2 + 24, 20);
 
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '11px monospace';
     if (GAME_STATE.gameState === 'BOSS_FIGHT') {
         ctx.fillStyle = '#f87171';
-        ctx.fillText('BOSS FIGHT!', canvas.width / 2 + 30, 42);
+        ctx.fillText('BOSS FIGHT!', canvas.width / 2 + 24, 42);
     } else {
         const secsLeft = Math.max(0, Math.ceil(GAME_STATE.waveTimerFrames / 60));
         const quotaLeft = Math.max(0, GAME_STATE.enemyQuotaThisWave - GAME_STATE.enemiesSpawnedThisWave + enemies.length);
-        ctx.fillText(`${secsLeft}s | MSH:${quotaLeft}`, canvas.width / 2 + 30, 42);
+        ctx.fillText(`${secsLeft}s | MSH:${quotaLeft}`, canvas.width / 2 + 24, 42);
     }
 
+    // Bar HP Player
     for (let h = 0; h < GAME_CONFIG.player.maxHp; h++) {
         ctx.fillStyle = h < player.hp ? '#22c55e' : '#334155';
-        ctx.fillRect(canvas.width - 18 - h * 14, 16, 10, 18);
+        ctx.fillRect(canvas.width - 18 - h * 14, 12, 10, 16);
     }
 
+    // Tombol Pause [||] di pojok kanan atas HUD
+    if (typeof getHudPauseButtonRect === 'function') {
+        const pauseRect = getHudPauseButtonRect();
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(pauseRect.x, pauseRect.y, pauseRect.w, pauseRect.h);
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(pauseRect.x, pauseRect.y, pauseRect.w, pauseRect.h);
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('||', pauseRect.x + pauseRect.w / 2, pauseRect.y + 13);
+    }
+
+    // Bar EXP
     const expRatio = Math.min(1, GAME_STATE.currentExp / GAME_STATE.expToNextLevel);
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(0, 58, canvas.width, 6);
     ctx.fillStyle = '#4ade80';
     ctx.fillRect(0, 58, canvas.width * expRatio, 6);
 
+    // HP Bar Boss
     if (GAME_STATE.gameState === 'BOSS_FIGHT' && boss) {
         const barW = canvas.width - 60;
         const hpRatio = Math.max(0, boss.hp / boss.maxHp);
@@ -174,6 +200,7 @@ function renderHUDAndOverlays() {
         ctx.strokeRect(30, 74, barW, 12);
     }
 
+    // Warning Boss
     if (GAME_STATE.gameState === 'BOSS_WARNING' && Math.floor(GAME_STATE.warningTimer / 12) % 2 === 0) {
         ctx.fillStyle = 'rgba(220, 38, 38, 0.25)';
         ctx.fillRect(0, canvas.height / 2 - 45, canvas.width, 90);
@@ -186,6 +213,7 @@ function renderHUDAndOverlays() {
         ctx.fillText(`WAVE ${GAME_STATE.wave} BOSS APPROACHING`, canvas.width / 2, canvas.height / 2 + 22);
     }
 
+    // 3. Overlay Pilihan Upgrade / Skill Tree
     if (GAME_STATE.gameState === 'SKILL_SELECT') {
         ctx.fillStyle = 'rgba(6, 9, 19, 0.90)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -237,25 +265,20 @@ function renderHUDAndOverlays() {
 
             ctx.fillStyle = '#cbd5e1';
             ctx.font = '11px monospace';
-            ctx.fillText(choice.desc, 56, cardY + (choice.isEvo || choice.isFusion ? 72 : 64));
+            const descStartY = (choice.isEvo || choice.isFusion) ? cardY + 70 : cardY + 56;
+            wrapCanvasText(choice.desc, 56, descStartY, canvas.width - 112, 15);
             ctx.restore();
         });
     }
 
-    if (GAME_STATE.gameState === 'START') {
-        ctx.fillStyle = 'rgba(6, 9, 19, 0.85)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#38bdf8';
-        ctx.font = 'bold 34px monospace';
-        ctx.fillText('SPACE DEFENDER', canvas.width / 2, canvas.height / 2 - 40);
-
-        ctx.fillStyle = '#facc15';
-        ctx.font = 'bold 16px monospace';
-        ctx.fillText('KLIK / TEKAN SPASI UNTUK MULAI', canvas.width / 2, canvas.height / 2 + 25);
+    // 4. Overlay Pause Menu
+    if (GAME_STATE.gameState === 'PAUSED') {
+        if (typeof renderPauseOverlay === 'function') {
+            renderPauseOverlay();
+        }
     }
 
+    // 5. Overlay Mission Report (Game Over)
     if (GAME_STATE.gameState === 'GAME_OVER') {
         const layout = getGameOverLayout();
         const { cx, cardX, cardY, cardW, cardH, shareBtn, retryBtn } = layout;
@@ -263,14 +286,12 @@ function renderHUDAndOverlays() {
         ctx.fillStyle = 'rgba(6, 9, 19, 0.92)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Panel Kartu Mission Report
         ctx.fillStyle = '#0f172a';
         ctx.fillRect(cardX, cardY, cardW, cardH);
         ctx.strokeStyle = '#334155';
         ctx.lineWidth = 2;
         ctx.strokeRect(cardX, cardY, cardW, cardH);
 
-        // Header Mission Report
         ctx.textAlign = 'center';
         ctx.fillStyle = '#ef4444';
         ctx.font = 'bold 26px monospace';
@@ -278,9 +299,8 @@ function renderHUDAndOverlays() {
 
         ctx.fillStyle = '#94a3b8';
         ctx.font = '11px monospace';
-        ctx.fillText('RINGKASAN STATISTIK PERTEMPURAN', cx, cardY + 58);
+        ctx.fillText(`MODE: ${GAME_STATE.gameMode} · RINGKASAN PERTEMPURAN`, cx, cardY + 58);
 
-        // Skor Utama & High Score
         ctx.fillStyle = '#facc15';
         ctx.font = 'bold 22px monospace';
         ctx.fillText(`SCORE: ${GAME_STATE.score.toLocaleString('id-ID')}`, cx, cardY + 92);
@@ -289,7 +309,6 @@ function renderHUDAndOverlays() {
         ctx.font = 'bold 12px monospace';
         ctx.fillText(`BEST SCORE: ${GAME_STATE.highScore.toLocaleString('id-ID')}`, cx, cardY + 112);
 
-        // Garis pemisah
         ctx.strokeStyle = '#1e293b';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
@@ -297,7 +316,6 @@ function renderHUDAndOverlays() {
         ctx.lineTo(cardX + cardW - 18, cardY + 126);
         ctx.stroke();
 
-        // Grid Statistik 2 Kolom
         const col1X = cardX + 22;
         const col2X = cx + 10;
         let statY = cardY + 150;
@@ -333,7 +351,6 @@ function renderHUDAndOverlays() {
         ctx.fillStyle = '#fb7185';
         ctx.fillText(`: ${GAME_STATE.enemiesKilled}`, col1X + 95, statY);
 
-        // Garis pemisah Build
         statY += 18;
         ctx.strokeStyle = '#1e293b';
         ctx.beginPath();
@@ -341,7 +358,6 @@ function renderHUDAndOverlays() {
         ctx.lineTo(cardX + cardW - 18, statY);
         ctx.stroke();
 
-        // Daftar Power-Up / Senjata & Level yang Diambil
         statY += 22;
         ctx.fillStyle = '#facc15';
         ctx.font = 'bold 12px monospace';
@@ -360,7 +376,7 @@ function renderHUDAndOverlays() {
             }
         });
 
-        // Tombol 1: Bagikan ke Sosmed
+        // Tombol Bagikan Skor
         ctx.fillStyle = '#0284c7';
         ctx.fillRect(shareBtn.x, shareBtn.y, shareBtn.w, shareBtn.h);
         ctx.strokeStyle = '#38bdf8';
@@ -372,7 +388,7 @@ function renderHUDAndOverlays() {
         ctx.textAlign = 'center';
         ctx.fillText('BAGIKAN SKOR', shareBtn.x + shareBtn.w / 2, shareBtn.y + 29);
 
-        // Tombol 2: Main Lagi
+        // Tombol Main Lagi
         ctx.fillStyle = '#15803d';
         ctx.fillRect(retryBtn.x, retryBtn.y, retryBtn.w, retryBtn.h);
         ctx.strokeStyle = '#4ade80';
@@ -382,7 +398,6 @@ function renderHUDAndOverlays() {
         ctx.fillStyle = '#ffffff';
         ctx.fillText('MAIN LAGI', retryBtn.x + retryBtn.w / 2, retryBtn.y + 29);
 
-        // Notifikasi setelah tombol Bagikan diklik
         if (GAME_STATE.shareFeedbackTimer > 0) {
             ctx.fillStyle = '#4ade80';
             ctx.font = 'bold 11.5px monospace';
@@ -403,6 +418,13 @@ function render() {
     for (const s of stars) {
         ctx.fillStyle = `rgba(226, 232, 240, ${s.alpha})`;
         ctx.fillRect(s.x, s.y, s.size, s.size);
+    }
+
+    // Jika masih di Main Menu, cukup gambar bintang latar + layar Main Menu
+    if (GAME_STATE.gameState === 'START') {
+        renderHUDAndOverlays();
+        ctx.restore();
+        return;
     }
 
     for (const d of drops) {

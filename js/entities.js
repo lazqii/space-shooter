@@ -101,6 +101,7 @@ function damagePlayer() {
             GAME_STATE.highScore = GAME_STATE.score;
             localStorage.setItem('space_shooter_hi', GAME_STATE.highScore);
         }
+        saveRunToHallOfFame();
     }
 }
 

@@ -16,12 +16,26 @@ loadSprite('scout', GAME_CONFIG.enemies.scout.sprite);
 loadSprite('heavy', GAME_CONFIG.enemies.heavy.sprite);
 loadSprite('boss', GAME_CONFIG.boss.defaultSprite);
 
+function loadHallOfFame() {
+    try {
+        const raw = localStorage.getItem('space_shooter_hof');
+        return raw ? JSON.parse(raw) : [];
+    } catch (_) {
+        return [];
+    }
+}
+
 const GAME_STATE = {
-    gameState: 'START', // START, WAVE_MINIONS, BOSS_WARNING, BOSS_FIGHT, SKILL_SELECT, GAME_OVER
+    gameState: 'START', // START, WAVE_MINIONS, BOSS_WARNING, BOSS_FIGHT, SKILL_SELECT, PAUSED, GAME_OVER
     previousState: 'WAVE_MINIONS',
+    gameMode: 'ENDLESS', // STAGE, SURVIVAL, ENDLESS
+    menuModal: null,     // null, 'MODE_SELECT', 'HALL_OF_FAME', 'ENCYCLOPEDIA'
+    encyclopediaTab: 'FUSIONS', // 'FUSIONS' atau 'WEAPONS'
+
     frameCount: 0,
     score: 0,
     highScore: Number(localStorage.getItem('space_shooter_hi')) || 0,
+    hallOfFame: loadHallOfFame(),
 
     wave: 1,
     waveTimerFrames: GAME_CONFIG.wave.durationSeconds * 60,
@@ -37,7 +51,6 @@ const GAME_STATE = {
     pendingLevelUps: 0,
     skillChoices: [],
 
-    // Statistik untuk Mission Report (Game Over)
     enemiesKilled: 0,
     bossesKilled: 0,
     playTimeFrames: 0,
