@@ -614,7 +614,142 @@ function render() {
     }
 
     if (boss) {
-        drawSpriteEntity(boss, assets.boss, boss.x, boss.y, boss.width, boss.height, true, '#7e22ce');
+        const bossSprite = (boss.isSpecial ? assets.specialBoss : assets.boss) || assets.player;
+        const hasTentacleImg = assets.specialBossTentacle && assets.specialBossTentacle.loaded;
+
+        // ============================================================
+        // 1. LAYER BELAKANG: Tentakel #1 (Mencuat dari balik bahu bos ke luar layar)
+        // ============================================================
+        if (boss.isSpecial && boss.tentacleAttack && boss.tentacleAttack.phase === 'STRIKE') {
+            const isLeft = boss.tentacleAttack.side === 'left';
+            const progress = 1 - (boss.tentacleAttack.timer / (boss.tentacleAttack.maxTimer || 42));
+            const backCurve = Math.sin(Math.min(1, progress * 1.25) * Math.PI);
+
+            if (backCurve > 0.02) {
+                const originX = boss.x + (isLeft ? -boss.width * 0.25 : boss.width * 0.25);
+                const originY = boss.y - boss.height * 0.12;
+
+                ctx.save();
+                ctx.translate(originX, originY);
+                if (isLeft) ctx.scale(-1, 1);
+
+                ctx.rotate(-0.15 + backCurve * 0.5);
+                const w1 = 135 * (0.7 + backCurve * 0.5);
+                const h1 = 175 * (0.7 + backCurve * 0.6);
+
+                if (hasTentacleImg) {
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.drawImage(assets.specialBossTentacle, -w1 * 0.35, -h1 * 0.85, w1, h1);
+                } else {
+                    ctx.fillStyle = '#110e2e';
+                    ctx.fillRect(-14, -h1 * 0.8, 28, h1 * 0.8);
+                }
+                ctx.restore();
+            }
+        }
+
+        // ============================================================
+        // 2. LAYER TENGAH: Badan Utama Bos
+        // ============================================================
+        drawSpriteEntity(boss, bossSprite, boss.x, boss.y, boss.width, boss.height, !boss.isSpecial, '#7e22ce');
+
+        // ============================================================
+        // 3. LAYER DEPAN: Garis Peringatan, Kilatan Mata & Tentakel #2 (Dari Tepi Layar)
+        // ============================================================
+        if (boss.isSpecial) {
+            // Garis & zona peringatan merah sebelum tentakel menyabet dari tepi layar
+            if (boss.tentacleAttack && boss.tentacleAttack.phase === 'WARN') {
+                const tx = boss.tentacleAttack.x;
+                const ty = boss.tentacleAttack.y;
+                const edgeX = boss.tentacleAttack.side === 'left' ? 0 : canvas.width;
+
+                ctx.save();
+                ctx.strokeStyle = 'rgba(244, 63, 94, 0.8)';
+                ctx.setLineDash([8, 6]);
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(edgeX, ty - 25);
+                ctx.lineTo(tx, ty);
+                ctx.stroke();
+
+                // Lingkaran target bahaya di posisi pemain
+                ctx.fillStyle = 'rgba(244, 63, 94, 0.18)';
+                ctx.beginPath();
+                ctx.arc(tx, ty, 38, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Tentakel #2: Muncul dari tepi layar samping (pangkal tersembunyi di luar canvas) menyabet ke target!
+            if (boss.tentacleAttack && boss.tentacleAttack.phase === 'STRIKE') {
+                const progress = 1 - (boss.tentacleAttack.timer / (boss.tentacleAttack.maxTimer || 42));
+                const strikePhase = Math.max(0, (progress - 0.10) / 0.90);
+                const thrustCurve = Math.sin(strikePhase * Math.PI);
+
+                if (thrustCurve > 0.02) {
+                    const isLeft = boss.tentacleAttack.side === 'left';
+                    const edgeX = isLeft ? -10 : canvas.width + 10;
+                    const anchorY = boss.tentacleAttack.y - 40;
+
+                    // Hitung sudut murni dari titik keluar di tepi layar menuju pusat lingkaran target
+                    const dx = boss.tentacleAttack.x - edgeX;
+                    const dy = boss.tentacleAttack.y - anchorY;
+                    const distToTarget = Math.hypot(dx, dy);
+                    const angleToTarget = Math.atan2(dy, dx);
+
+                    ctx.save();
+                    ctx.translate(edgeX, anchorY);
+
+                    // Putar sumbu -Y (atas gambar) agar mengarah lurus ke lingkaran target
+                    // Dikurangi 0.45 rad karena ujung gambar tentakel aslinya melengkung ke kanan atas
+                    ctx.rotate(angleToTarget + Math.PI / 2 - (isLeft ? 0.45 : -0.45));
+                    if (!isLeft) ctx.scale(-1, 1);
+
+                    // Tambahkan efek ayunan cambukan saat menyabet
+                    const whipSwing = (1 - thrustCurve) * -0.25;
+                    ctx.rotate(whipSwing);
+
+                    const drawW = 140;
+                    // Perpanjang 1.45x dari jarak target supaya ujung runcingnya benar-benar melewati titik target
+                    const drawH = Math.max(60, (distToTarget * 1.45 + 60) * thrustCurve);
+
+                    if (hasTentacleImg) {
+                        ctx.imageSmoothingEnabled = false;
+                        // Pivot tepat di pangkal bawah tengah gambar (-drawW * 0.5, -drawH)
+                        ctx.drawImage(assets.specialBossTentacle, -drawW * 0.5, -drawH, drawW, drawH);
+                    } else {
+                        ctx.fillStyle = '#110e2e';
+                        ctx.strokeStyle = '#be123c';
+                        ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        ctx.moveTo(-22, 0);
+                        ctx.lineTo(0, -drawH);
+                        ctx.lineTo(22, 0);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+            }
+
+            // Kilatan energi di mata sebelum menembakkan laser
+            if (boss.eyeCharge) {
+                const ex = boss.x + boss.eyeCharge.ox;
+                const ey = boss.y + boss.eyeCharge.oy;
+                ctx.save();
+                ctx.fillStyle = boss.eyeCharge.isCenter ? 'rgba(250, 204, 21, 0.85)' : 'rgba(254, 240, 138, 0.8)';
+                ctx.shadowColor = '#facc15';
+                ctx.shadowBlur = 16;
+                ctx.beginPath();
+                ctx.arc(ex, ey, boss.eyeCharge.isCenter ? 18 : 11, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // 4. Tameng Kebal Intro
         if (boss.introTimer > 0) {
             ctx.save();
             ctx.translate(boss.x, boss.y);
@@ -661,10 +796,34 @@ function render() {
     }
 
     for (const b of enemyBullets) {
-        ctx.fillStyle = b.color;
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-        ctx.fill();
+        if (b.isBossLaser) {
+            ctx.save();
+            ctx.translate(b.x, b.y);
+            ctx.rotate(Math.atan2(b.vy, b.vx) + Math.PI / 2);
+
+            const grad = ctx.createLinearGradient(0, -24, 0, 24);
+            grad.addColorStop(0, 'rgba(250, 204, 21, 0)');
+            grad.addColorStop(0.5, 'rgba(245, 158, 11, 0.85)');
+            grad.addColorStop(1, 'rgba(254, 240, 138, 1)');
+
+            ctx.fillStyle = grad;
+            ctx.fillRect(-4.5, -24, 9, 48);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.moveTo(0, 22);
+            ctx.lineTo(2.2, -16);
+            ctx.lineTo(-2.2, -16);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+        } else {
+            ctx.fillStyle = b.color;
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 
     for (const pt of particles) {

@@ -86,6 +86,26 @@ const GAME_CONFIG = {
         enrageCooldown: 55
     },
 
+    specialBoss: {
+        sprite: 'assets/special-boss-wave.png',
+        tentacleSprite: 'assets/tentacle-special-wave-boss.png',
+        name: 'ABYSSAL BROODMOTHER',
+        width: 360,
+        height: 250,
+        spawnChance: 0.20,        // 10% di wave biasa
+        guaranteedEveryWave: 10,  // 100% muncul di wave kelipatan 10
+        hpMultiplier: 2.2,        // 2.2x HP boss biasa di wave tersebut
+        expMultiplier: 2.0,       // 2x EXP boss biasa di wave tersebut
+        scoreMultiplier: 2.5,
+
+        // Cooldown masing-masing serangan (dalam frame, 60 = 1 detik)
+        mouthBarrageCd: 95,
+        eyeLaserCd: 110,
+        tentacleSlamCd: 170,
+        spawnHeavyCd: 340,        // Setiap ~5.6 detik memunculkan Heavy Enemy
+        maxActiveHeavies: 4       // Batas Heavy Enemy aktif agar layar tidak penuh sesak
+    },
+
     // ==========================================
     // DATA SKILL TREE (6 SENJATA LENGKAP)
     // ==========================================

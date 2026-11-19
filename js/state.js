@@ -15,6 +15,10 @@ loadSprite('player', GAME_CONFIG.player.sprite);
 loadSprite('scout', GAME_CONFIG.enemies.scout.sprite);
 loadSprite('heavy', GAME_CONFIG.enemies.heavy.sprite);
 loadSprite('boss', GAME_CONFIG.boss.defaultSprite);
+if (GAME_CONFIG.specialBoss) {
+    loadSprite('specialBoss', GAME_CONFIG.specialBoss.sprite);
+    loadSprite('specialBossTentacle', GAME_CONFIG.specialBoss.tentacleSprite);
+}
 
 function loadHallOfFame() {
     try {

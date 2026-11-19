@@ -57,26 +57,89 @@ function spawnEnemy() {
     });
 }
 
-function spawnBoss() {
-    const bCfg = GAME_CONFIG.boss;
-    const totalHp = bCfg.baseHp + (GAME_STATE.wave - 1) * bCfg.hpIncrementPerWave;
-    const sizeBonus = Math.min(bCfg.maxSizeBonus, (GAME_STATE.wave - 1) * bCfg.sizeIncrementPerWave);
+function spawnSpecificEnemy(type, spawnX, spawnY) {
+    const cfg = GAME_CONFIG.enemies[type];
+    if (!cfg) return;
+    const maxHp = cfg.baseHp + (GAME_STATE.wave - 1) * cfg.hpIncrementPerWave;
 
-    boss = {
-        x: canvas.width / 2,
-        y: -130,
-        targetY: 155,
-        width: bCfg.baseWidth + sizeBonus,
-        height: bCfg.baseHeight + sizeBonus,
-        vx: bCfg.baseSpeedX + (GAME_STATE.wave - 1) * bCfg.speedIncrementPerWave,
-        hp: totalHp,
-        maxHp: totalHp,
-        attackTimer: 180,
-        patternIndex: 0,
+    enemies.push({
+        type,
+        cfg,
+        x: spawnX,
+        y: spawnY,
+        width: cfg.width,
+        height: cfg.height,
+        vy: cfg.baseSpeedY + (GAME_STATE.wave - 1) * cfg.speedIncrement,
+        vx: cfg.speedX ? (Math.random() < 0.5 ? -cfg.speedX : cfg.speedX) : 0,
+        hp: maxHp,
+        maxHp,
+        shootTimer: 60 + Math.floor(Math.random() * 60),
         hitFlash: 0,
-        status: null,
-        introTimer: 180
-    };
+        status: null
+    });
+}
+
+function spawnBoss() {
+    const cfg = GAME_CONFIG.boss;
+    const spCfg = GAME_CONFIG.specialBoss;
+    const waveScale = Math.max(0, GAME_STATE.wave - 1);
+
+    // Cek apakah wave kelipatan 10 (100%) atau kena peluang 10%
+    const isSpecial = spCfg && (
+        (GAME_STATE.wave % spCfg.guaranteedEveryWave === 0) ||
+        (Math.random() < spCfg.spawnChance)
+    );
+
+    const baseBossHp = cfg.baseHp + waveScale * cfg.hpIncrementPerWave;
+    const baseBossExp = cfg.expReward + waveScale * 25;
+    const baseBossScore = cfg.baseScore + waveScale * 500;
+
+    if (isSpecial) {
+        boss = {
+            isSpecial: true,
+            name: spCfg.name,
+            x: canvas.width / 2,
+            y: -140,
+            targetY: 175,
+            width: spCfg.width,
+            height: spCfg.height,
+            hp: Math.round(baseBossHp * spCfg.hpMultiplier),
+            maxHp: Math.round(baseBossHp * spCfg.hpMultiplier),
+            expReward: Math.round(baseBossExp * spCfg.expMultiplier),
+            scoreReward: Math.round(baseBossScore * spCfg.scoreMultiplier),
+            introTimer: 110,
+            hitFlash: 0,
+            status: null,
+
+            // Timer 4 pola serangan khusus
+            mouthTimer: 70,
+            eyeTimer: 90,
+            eyeCharge: null,
+            tentacleTimer: 130,
+            tentacleAttack: null,
+            spawnHeavyTimer: 200
+        };
+    } else {
+        const sizeBonus = Math.min(cfg.maxSizeBonus, waveScale * cfg.sizeIncrementPerWave);
+        boss = {
+            isSpecial: false,
+            x: canvas.width / 2,
+            y: -90,
+            targetY: 135,
+            width: cfg.baseWidth + sizeBonus,
+            height: cfg.baseHeight + sizeBonus,
+            hp: baseBossHp,
+            maxHp: baseBossHp,
+            expReward: baseBossExp,
+            scoreReward: baseBossScore,
+            speedX: cfg.baseSpeedX + waveScale * cfg.speedIncrementPerWave,
+            dirX: Math.random() < 0.5 ? -1 : 1,
+            attackTimer: cfg.attackCooldown,
+            introTimer: 90,
+            hitFlash: 0,
+            status: null
+        };
+    }
 }
 
 function damagePlayer() {
@@ -299,56 +362,197 @@ function updateEnemiesAndBoss() {
 
     if (GAME_STATE.gameState === 'BOSS_FIGHT' && boss) {
         updateStatusEffects(boss);
-        const bCfg = GAME_CONFIG.boss;
-        if (boss.introTimer > 0) boss.introTimer--;
+        if (boss.hitFlash > 0) boss.hitFlash--;
 
-        if (boss.status && boss.status.timeStopTimer > 0) {
-            if (boss.hitFlash > 0) boss.hitFlash--;
-        } else {
-            const bSpeedMult = 1 - (boss.status.slowFactor || 0);
-            if (boss.y < boss.targetY) {
-                boss.y += 1.5;
-            } else {
-                boss.x += boss.vx * bSpeedMult;
-                const margin = boss.width * 0.45;
-                if (boss.x < margin || boss.x > canvas.width - margin) boss.vx *= -1;
+        // Fase masuk arena (turun sampai targetY)
+        if (boss.y < boss.targetY) {
+            boss.y += 1.6;
+        }
+        if (boss.introTimer > 0) {
+            boss.introTimer--;
+            return;
+        }
 
-                boss.attackTimer -= bSpeedMult;
-                const isEnraged = boss.hp < boss.maxHp * 0.5;
-                if (boss.attackTimer <= 0) {
-                    const bSpeed = (bCfg.bulletSpeed + (GAME_STATE.wave - 1) * bCfg.bulletSpeedIncrement) * bSpeedMult;
-                    if (boss.patternIndex % 2 === 0) {
-                        const count = isEnraged ? 5 : 3;
-                        const spread = 0.24;
-                        const startAngle = Math.PI / 2 - ((count - 1) * spread) / 2;
-                        for (let k = 0; k < count; k++) {
-                            const ang = startAngle + k * spread;
-                            enemyBullets.push({
-                                x: boss.x, y: boss.y + boss.height * 0.35,
-                                vx: Math.cos(ang) * bSpeed, vy: Math.sin(ang) * bSpeed,
-                                r: 6, color: '#a855f7'
-                            });
+        const st = boss.status || {};
+        const timeMult = st.timeStopTimer > 0 ? 0.5 : (st.freezeTimer > 0 ? 0.75 : 1.0);
+
+        if (boss.isSpecial) {
+            // ==========================================
+            // AI SPECIAL BOSS (DIAM DI TEMPAT + 4 SKILL)
+            // ==========================================
+            const spCfg = GAME_CONFIG.specialBoss;
+            const halfW = boss.width / 2;
+            const halfH = boss.height / 2;
+
+            // 1. SERANGAN TENTAKEL (Animasi Sprite Memanjang & Menukik)
+            if (boss.tentacleAttack) {
+                boss.tentacleAttack.timer -= timeMult;
+                if (boss.tentacleAttack.phase === 'WARN' && boss.tentacleAttack.timer <= 0) {
+                    boss.tentacleAttack.phase = 'STRIKE';
+                    boss.tentacleAttack.maxTimer = 42; // 0.7 detik total animasi
+                    boss.tentacleAttack.timer = 42;
+                    GAME_STATE.screenShake = 9;
+                } else if (boss.tentacleAttack.phase === 'STRIKE') {
+                    const progress = 1 - (boss.tentacleAttack.timer / boss.tentacleAttack.maxTimer);
+                    // Tentakel ujung aktif menyabet area target di tengah/bawah layar (progress 35% - 80%)
+                    if (progress >= 0.35 && progress <= 0.80) {
+                        const hitRadiusX = 52;
+                        const hitRadiusY = 38;
+                        if (
+                            Math.abs(player.x - boss.tentacleAttack.x) < hitRadiusX &&
+                            Math.abs(player.y - boss.tentacleAttack.y) < hitRadiusY
+                        ) {
+                            damagePlayer();
                         }
-                    } else {
-                        [-55, 55].forEach(offsetX => {
-                            const bx = boss.x + offsetX, by = boss.y + 15;
-                            const angle = Math.atan2(player.y - by, player.x - bx);
+                    }
+                    if (boss.tentacleAttack.timer <= 0) {
+                        boss.tentacleAttack = null;
+                    }
+                }
+            } else {
+                boss.tentacleTimer -= timeMult;
+                if (boss.tentacleTimer <= 0) {
+                    const targetX = Math.min(canvas.width - 55, Math.max(55, player.x));
+                    const targetY = Math.min(canvas.height - 70, Math.max(boss.y + halfH + 80, player.y));
+                    boss.tentacleAttack = {
+                        x: targetX,
+                        y: targetY,
+                        side: targetX < canvas.width / 2 ? 'left' : 'right',
+                        phase: 'WARN',
+                        timer: 48
+                    };
+                    boss.tentacleTimer = spCfg.tentacleSlamCd;
+                }
+            }
+
+            // 2. TEMBAKAN DARI BANYAK MULUT (Koordinat presisi di 3 mulut utama)
+            boss.mouthTimer -= timeMult;
+            if (boss.mouthTimer <= 0) {
+                const mouthOffsets = [
+                    { ox: -halfW * 0.46, oy: -halfH * 0.36 }, // Mulut lidah kiri atas
+                    { ox: 0, oy: halfH * 0.22 },  // Mulut bergigi tengah
+                    { ox: halfW * 0.22, oy: -halfH * 0.16 }  // Mulut lidah samping kanan
+                ];
+                mouthOffsets.forEach((m, idx) => {
+                    const mx = boss.x + m.ox;
+                    const my = boss.y + m.oy;
+                    const baseAngle = Math.atan2(player.y - my, player.x - mx);
+                    const spread = idx === 1 ? [-0.22, 0, 0.22] : [-0.1, 0.1];
+                    spread.forEach(ang => {
+                        const spd = 4.2 + GAME_STATE.wave * 0.08;
+                        enemyBullets.push({
+                            x: mx, y: my,
+                            vx: Math.cos(baseAngle + ang) * spd,
+                            vy: Math.sin(baseAngle + ang) * spd,
+                            r: 6,
+                            color: '#f43f5e'
+                        });
+                    });
+                });
+                boss.mouthTimer = spCfg.mouthBarrageCd;
+            }
+
+            // 3. LASER MATA ACAK & MATA TENGAH (Koordinat presisi di tengah bola mata kuning)
+            if (boss.eyeCharge) {
+                boss.eyeCharge.timer -= timeMult;
+                if (boss.eyeCharge.timer <= 0) {
+                    const ex = boss.x + boss.eyeCharge.ox;
+                    const ey = boss.y + boss.eyeCharge.oy;
+                    const laserSpd = 9.0;
+
+                    if (boss.eyeCharge.isCenter) {
+                        const angles = [-0.40, -0.20, 0, 0.20, 0.40];
+                        angles.forEach(a => {
+                            const finalAng = Math.PI / 2 + a;
                             enemyBullets.push({
-                                x: bx, y: by,
-                                vx: Math.cos(angle) * (bSpeed + 0.4), vy: Math.sin(angle) * (bSpeed + 0.4),
-                                r: 5.5, color: '#f59e0b'
+                                isBossLaser: true,
+                                x: ex, y: ey,
+                                vx: Math.cos(finalAng) * laserSpd,
+                                vy: Math.sin(finalAng) * laserSpd,
+                                r: 5,
+                                color: '#facc15'
                             });
                         });
+                    } else {
+                        const aimAng = Math.atan2(player.y - ey, player.x - ex);
+                        enemyBullets.push({
+                            isBossLaser: true,
+                            x: ex, y: ey,
+                            vx: Math.cos(aimAng) * (laserSpd + 1.2),
+                            vy: Math.sin(aimAng) * (laserSpd + 1.2),
+                            r: 5,
+                            color: '#fde047'
+                        });
                     }
-                    boss.patternIndex++;
-                    const cd = isEnraged ? bCfg.enrageCooldown : bCfg.attackCooldown;
-                    boss.attackTimer = Math.max(35, cd - (GAME_STATE.wave - 1) * 4);
+                    boss.eyeCharge = null;
                 }
+            } else {
+                boss.eyeTimer -= timeMult;
+                if (boss.eyeTimer <= 0) {
+                    const eyes = [
+                        { ox: 0, oy: -halfH * 0.12, isCenter: true },  // Mata besar tengah
+                        { ox: -halfW * 0.68, oy: -halfH * 0.02, isCenter: false }, // Mata besar kiri
+                        { ox: -halfW * 0.38, oy: halfH * 0.08, isCenter: false }, // Mata kecil tengah-kiri
+                        { ox: -halfW * 0.19, oy: -halfH * 0.34, isCenter: false }, // Mata atas tengah
+                        { ox: halfW * 0.64, oy: -halfH * 0.30, isCenter: false }  // Mata besar kanan
+                    ];
+                    const chosen = eyes[Math.floor(Math.random() * eyes.length)];
+                    boss.eyeCharge = { ...chosen, timer: 28 };
+                    boss.eyeTimer = spCfg.eyeLaserCd;
+                }
+            }
+
+            // 4. MEMUNCULKAN HEAVY ENEMY DARI MULUT BUNDAR KIRI BAWAH & KANAN BAWAH
+            boss.spawnHeavyTimer -= timeMult;
+            if (boss.spawnHeavyTimer <= 0) {
+                const activeHeavies = enemies.filter(e => e.type === 'heavy').length;
+                if (activeHeavies < spCfg.maxActiveHeavies) {
+                    const spawnPoints = [
+                        { x: boss.x - halfW * 0.44, y: boss.y + halfH * 0.36 }, // Mulut merah kiri bawah
+                        { x: boss.x + halfW * 0.64, y: boss.y + halfH * 0.28 }  // Mulut merah kanan bawah
+                    ];
+                    spawnPoints.forEach(sp => {
+                        spawnSpecificEnemy('heavy', sp.x, sp.y);
+                        createExplosion(sp.x, sp.y, ['#f43f5e', '#fb7185'], 10);
+                    });
+                }
+                boss.spawnHeavyTimer = spCfg.spawnHeavyCd;
+            }
+        } else {
+            // ==========================================
+            // AI BOSS BIASA (GERAK KIRI-KANAN + TEMBAK)
+            // ==========================================
+            const bCfg = GAME_CONFIG.boss;
+            const waveScale = Math.max(0, GAME_STATE.wave - 1);
+            boss.x += boss.speedX * boss.dirX * timeMult;
+            const margin = boss.width * 0.45;
+            if (boss.x <= margin) { boss.x = margin; boss.dirX = 1; }
+            if (boss.x >= canvas.width - margin) { boss.x = canvas.width - margin; boss.dirX = -1; }
+
+            boss.attackTimer -= timeMult;
+            if (boss.attackTimer <= 0) {
+                const isEnraged = boss.hp < boss.maxHp * 0.5;
+                const spd = bCfg.bulletSpeed + waveScale * bCfg.bulletSpeedIncrement;
+                const baseAngle = Math.atan2(player.y - boss.y, player.x - boss.x);
+                const spread = isEnraged ? [-0.32, -0.16, 0, 0.16, 0.32] : [-0.2, 0, 0.2];
+                spread.forEach(a => {
+                    enemyBullets.push({
+                        x: boss.x, y: boss.y + boss.height * 0.3,
+                        vx: Math.cos(baseAngle + a) * spd,
+                        vy: Math.sin(baseAngle + a) * spd,
+                        r: 6,
+                        color: '#a855f7'
+                    });
+                });
+                boss.attackTimer = isEnraged ? bCfg.enrageCooldown : bCfg.attackCooldown;
             }
         }
 
-        if (boss.hitFlash > 0) boss.hitFlash--;
-        const bHitW = boss.width * 0.4, bHitH = boss.height * 0.35;
+        // ==========================================
+        // TABRAKAN PELURU & KEMATIAN (BERLAKU UNTUK SEMUA BOSS)
+        // ==========================================
+        const bHitW = boss.width * 0.42;
+        const bHitH = boss.height * 0.36;
 
         if (Math.abs(boss.x - player.x) < (bHitW + player.width * 0.35) && Math.abs(boss.y - player.y) < (bHitH + player.height * 0.35)) {
             damagePlayer();
@@ -365,15 +569,17 @@ function updateEnemiesAndBoss() {
         }
 
         if (boss && boss.hp <= 0) {
-            GAME_STATE.score += bCfg.baseScore * GAME_STATE.wave;
+            const wasSpecial = boss.isSpecial;
+            GAME_STATE.score += boss.scoreReward || (GAME_CONFIG.boss.baseScore * GAME_STATE.wave);
             GAME_STATE.bossesKilled++;
-            GAME_STATE.screenShake = 22;
-            createExplosion(boss.x, boss.y, ['#7e22ce', '#f59e0b', '#38bdf8', '#ffffff'], 55);
+            GAME_STATE.screenShake = wasSpecial ? 30 : 22;
+            createExplosion(boss.x, boss.y, ['#7e22ce', '#f59e0b', '#38bdf8', '#ffffff'], wasSpecial ? 80 : 55);
             drops.push({ x: boss.x, y: boss.y, vy: 2, kind: 'HEAL' });
-            const bossExp = bCfg.expReward;
+            const bossExp = boss.expReward || GAME_CONFIG.boss.expReward;
             boss = null;
             setupWave(GAME_STATE.wave + 1);
             addExp(bossExp);
         }
     }
+
 }
