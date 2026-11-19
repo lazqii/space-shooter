@@ -67,7 +67,8 @@ const player = {
     hp: GAME_CONFIG.player.maxHp,
     hasShield: false,
     invulnTimer: 0,
-    godMode: false
+    godMode: false,
+    ultimateActive: false
 };
 
 let playerSkills = {
@@ -90,8 +91,13 @@ let weaponTimers = {
     flameCooldown: 0,
     flameActive: 0,
     flameTick: 0,
-    fusionMain: 0,
-    fusionSub: 0
+    fusionCryo: 0,
+    fusionCryoSub: 0,
+    fusionTimeStop: 0,
+    fusionTimeStopSub: 0,
+    fusionDoom: 0,
+    fusionInferno: 0,
+    fusionElectroDoom: 0
 };
 
 let playerFusions = {

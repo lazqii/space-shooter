@@ -398,7 +398,7 @@ function renderEncyclopediaModal() {
         ctx.textAlign = 'left';
         ctx.fillStyle = '#94a3b8';
         ctx.font = '10.5px monospace';
-        ctx.fillText('Syarat umum: Minimal Player Lv.15 & kedua bahan MAX.', contentX, curY);
+        ctx.fillText('Syarat: Kedua LV. Senjata MAX. | Fusion 1 LV.10 | Fusion 2 LV.20', contentX, curY);
         curY += 18;
 
         for (const fKey in GAME_CONFIG.fusions) {

@@ -9,12 +9,18 @@ const GAME_CONFIG = {
         height: 64,
         speed: 6,
         maxHp: 5,
-        invulnDuration: 60 // 1.0 detik immune saat terkena hit / naik level
+        invulnDuration: 80 // immune saat terkena hit / naik level
     },
 
     leveling: {
         baseExpRequired: 100,
         expIncrementPerLvl: 50
+    },
+
+    fusionRules: {
+        firstFusionMinLevel: 10,  // Minimal Lv.10 untuk memunculkan Fusion ke-1
+        secondFusionMinLevel: 20, // Minimal Lv.20 untuk memunculkan Fusion ke-2
+        maxActiveFusions: 2       // Batas maksimal Fusion dalam 1 permainan
     },
 
     drops: {
@@ -372,7 +378,6 @@ const GAME_CONFIG = {
         cryoMachine: {
             id: 'cryoMachine',
             name: 'Cryo Machine',
-            minPlayerLevel: 15,
             req: { laser: '6b', arctic: '6a' },
             reqText: 'Laser: Rapid Stream + Arctic Bullet: Homing Shard',
             title: 'Cryo Machine',
@@ -382,7 +387,6 @@ const GAME_CONFIG = {
         timeStop: {
             id: 'timeStop',
             name: 'Time Stop',
-            minPlayerLevel: 15,
             req: { he: '6b', arctic: '6a' },
             reqText: 'HE Cannon: Cryo Freeze + Arctic Bullet: Homing Shard',
             title: 'Time Stop',
@@ -392,7 +396,6 @@ const GAME_CONFIG = {
         doom: {
             id: 'doom',
             name: 'Doom',
-            minPlayerLevel: 15,
             req: { laser: '6a', he: '6a' },
             reqText: 'Laser Gun: Scatter + HE Cannon: Napalm Burn',
             title: 'Doom',
@@ -402,7 +405,6 @@ const GAME_CONFIG = {
         inferno: {
             id: 'inferno',
             name: 'Inferno',
-            minPlayerLevel: 15,
             req: { lightning: '6a', flamethrower: '6b' },
             reqText: 'Lightning: Overload + Flame: Wildfire Jet',
             title: 'Inferno',
@@ -412,7 +414,6 @@ const GAME_CONFIG = {
         electroDoom: {
             id: 'electroDoom',
             name: 'Electro Doom',
-            minPlayerLevel: 15,
             req: { lightning: '6a', he: '6a' },
             reqText: 'Lightning: Overload + HE Cannon: Napalm Burn',
             title: 'Electro Doom',

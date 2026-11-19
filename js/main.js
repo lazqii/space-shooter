@@ -40,7 +40,8 @@ function startGame() {
     weaponTimers = {
         laser: 0, he: 0, lightning: 0, arctic: 0, arcticSeeker: 0,
         arcticShield: 0, shockwave: 0, flameCooldown: 0, flameActive: 0,
-        flameTick: 0, fusionMain: 0, fusionSub: 0
+        flameTick: 0, fusionCryo: 0, fusionCryoSub: 0, fusionTimeStop: 0,
+        fusionTimeStopSub: 0, fusionDoom: 0, fusionInferno: 0, fusionElectroDoom: 0
     };
     playerFusions = { cryoMachine: false, timeStop: false, doom: false, inferno: false, electroDoom: false };
     lightningState = { lockedTarget: null, lockFrames: 0, lastStackCount: 0, currentIntensity: 0, visualBolts: [] };
@@ -50,6 +51,7 @@ function startGame() {
     player.hp = GAME_CONFIG.player.maxHp;
     player.hasShield = false;
     player.invulnTimer = 0;
+    player.ultimateActive = false;
 
     boss = null;
     projectiles = [];
@@ -91,15 +93,12 @@ function update() {
     applyPlayerMovement();
 
     if (player.invulnTimer > 0) player.invulnTimer--;
-    if (weaponTimers.laser > 0) weaponTimers.laser--;
-    if (weaponTimers.he > 0) weaponTimers.he--;
-    if (weaponTimers.lightning > 0) weaponTimers.lightning--;
-    if (weaponTimers.arctic > 0) weaponTimers.arctic--;
-    if (weaponTimers.arcticSeeker > 0) weaponTimers.arcticSeeker--;
-    if (weaponTimers.arcticShield > 0) weaponTimers.arcticShield--;
-    if (weaponTimers.shockwave > 0) weaponTimers.shockwave--;
-    if (weaponTimers.fusionMain > 0) weaponTimers.fusionMain--;
-    if (weaponTimers.fusionSub > 0) weaponTimers.fusionSub--;
+
+    // Kurangi semua timer cooldown senjata & fusion (kecuali flameActive & flameCooldown yang diatur executeFlameThrower)
+    for (const key in weaponTimers) {
+        if (key === 'flameActive' || key === 'flameCooldown' || key === 'flameTick') continue;
+        if (weaponTimers[key] > 0) weaponTimers[key]--;
+    }
 
     fireActiveWeapons();
 

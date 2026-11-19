@@ -1,5 +1,4 @@
 // js/weapons.js - Logika 6 Senjata Normal, 5 Fusion, Skill Tree & EXP
-
 function getUsedFusionWeapons() {
     const used = new Set();
     if (!GAME_CONFIG.fusions) return used;
@@ -26,68 +25,56 @@ function consumeFusionMaterials(fusionKey) {
     }
 }
 
-function getAvailableSkillUpgrades() {
-    const pool = [];
-    const weaponKeys = ['laser', 'he', 'lightning', 'arctic', 'shockwave', 'flamethrower'];
-    const usedFusionWeapons = getUsedFusionWeapons();
+function getActiveFusionCount() {
+    return Object.values(playerFusions).filter(Boolean).length;
+}
 
-    const fusionCards = [];
-    if (GAME_CONFIG.fusions && GAME_STATE.playerLevel >= 15) {
-        for (const fKey in GAME_CONFIG.fusions) {
-            const fData = GAME_CONFIG.fusions[fKey];
-            if (!playerFusions[fKey]) {
-                let eligible = true;
-                for (const rW in fData.req) {
-                    if (usedFusionWeapons.has(rW) || playerSkills[rW] !== fData.req[rW]) {
-                        eligible = false;
-                        break;
-                    }
-                }
-                if (eligible) {
-                    fusionCards.push({
-                        isFusion: true,
-                        fusionKey: fKey,
-                        title: `FUSION: ${fData.name}`,
-                        desc: fData.desc,
-                        reqText: fData.reqText
-                    });
-                }
+function getRequiredLevelForNextFusion() {
+    const activeCount = getActiveFusionCount();
+    const rules = GAME_CONFIG.fusionRules || {
+        firstFusionMinLevel: 10,
+        secondFusionMinLevel: 20,
+        maxActiveFusions: 2
+    };
+
+    if (activeCount >= rules.maxActiveFusions) return Infinity;
+    return activeCount === 0 ? rules.firstFusionMinLevel : rules.secondFusionMinLevel;
+}
+
+function getAvailableFusions() {
+    const available = [];
+    if (!GAME_CONFIG.fusions) return available;
+
+    const requiredLevel = getRequiredLevelForNextFusion();
+    if (GAME_STATE.playerLevel < requiredLevel) return available;
+
+    for (const fKey in GAME_CONFIG.fusions) {
+        if (playerFusions[fKey]) continue;
+
+        const fCfg = GAME_CONFIG.fusions[fKey];
+
+        // Cek apakah kedua senjata syarat sudah dimiliki dan dalam keadaan MAX
+        let reqMet = true;
+        for (const [reqWeapon, reqLvl] of Object.entries(fCfg.req)) {
+            if (playerSkills[reqWeapon] !== reqLvl) {
+                reqMet = false;
+                break;
             }
         }
-    }
 
-    for (const wKey of weaponKeys) {
-        if (usedFusionWeapons.has(wKey)) continue;
-        const wCfg = GAME_CONFIG.weapons[wKey];
-        if (!wCfg) continue;
-        const curLvl = playerSkills[wKey];
-
-        if (!curLvl) {
-            pool.push({ weapon: wKey, nextLvl: '1', title: `Unlock: ${wCfg.name}`, desc: wCfg.levels['1'].desc });
-        } else if (curLvl === '1' || curLvl === '2') {
-            const next = String(Number(curLvl) + 1);
-            pool.push({ weapon: wKey, nextLvl: next, title: `${wCfg.name} Lv.${next}`, desc: wCfg.levels[next].desc });
-        } else if (curLvl === '3') {
-            pool.push({ weapon: wKey, nextLvl: '4a', title: wCfg.levels['4a'].name, desc: wCfg.levels['4a'].desc, isEvo: true });
-            pool.push({ weapon: wKey, nextLvl: '4b', title: wCfg.levels['4b'].name, desc: wCfg.levels['4b'].desc, isEvo: true });
-        } else if (curLvl === '4a' || curLvl === '5a') {
-            const next = curLvl === '4a' ? '5a' : '6a';
-            pool.push({ weapon: wKey, nextLvl: next, title: wCfg.levels[next].name, desc: wCfg.levels[next].desc });
-        } else if (curLvl === '4b' || curLvl === '5b') {
-            const next = curLvl === '4b' ? '5b' : '6b';
-            pool.push({ weapon: wKey, nextLvl: next, title: wCfg.levels[next].name, desc: wCfg.levels[next].desc });
+        if (reqMet) {
+            const fusionOrder = getActiveFusionCount() + 1;
+            available.push({
+                isFusion: true,
+                fusionKey: fKey,
+                title: `FUSION #${fusionOrder}: ${fCfg.name}`,
+                reqText: fCfg.reqText,
+                desc: fCfg.desc,
+                color: fCfg.color || '#cbd5e1'
+            });
         }
     }
-
-    const shuffledNormal = pool.sort(() => Math.random() - 0.5);
-    const combined = [...fusionCards, ...shuffledNormal];
-
-    if (combined.length === 0) {
-        combined.push({ weapon: 'heal', nextLvl: null, title: 'Emergency Repair', desc: 'Pulihkan +2 HP Pesawat' });
-        combined.push({ weapon: 'bonus', nextLvl: null, title: 'Overcharge Core', desc: '+1000 Bonus Score' });
-    }
-
-    return combined.slice(0, 3);
+    return available;
 }
 
 function addExp(amount) {
@@ -106,10 +93,108 @@ function addExp(amount) {
 }
 
 function triggerSkillSelection() {
+    if (GAME_STATE.pendingLevelUps <= 0) return;
     GAME_STATE.pendingLevelUps--;
-    GAME_STATE.skillChoices = getAvailableSkillUpgrades();
-    GAME_STATE.previousState = GAME_STATE.gameState;
+
+    if (GAME_STATE.gameState !== 'SKILL_SELECT') {
+        GAME_STATE.previousState = GAME_STATE.gameState;
+    }
     GAME_STATE.gameState = 'SKILL_SELECT';
+
+    const choices = [];
+
+    // 1. Masukkan semua Fusion yang syaratnya sudah terpenuhi (bisa lebih dari 1 fusion)
+    const readyFusions = getAvailableFusions();
+    for (const fChoice of readyFusions) {
+        if (choices.length < 3) {
+            choices.push(fChoice);
+        }
+    }
+
+    // 2. Bangun daftar upgrade senjata biasa untuk mengisi sisa slot kartu
+    const normalPool = [];
+    const allWeaponKeys = Object.keys(GAME_CONFIG.weapons);
+
+    // Hitung jumlah senjata aktif saat ini (termasuk yang sudah melebur jadi fusion)
+    const activeWeaponCount = allWeaponKeys.filter(k => playerSkills[k] !== null).length;
+    const maxWeaponSlots = 4; // Maksimal 4 slot senjata non-fusion di tangan sekaligus
+
+    for (const wKey of allWeaponKeys) {
+        const wCfg = GAME_CONFIG.weapons[wKey];
+        const curLvl = playerSkills[wKey];
+
+        // Cek apakah senjata ini sudah dilebur ke dalam salah satu Fusion yang aktif
+        const alreadyFused = Object.keys(playerFusions).some(
+            fKey => playerFusions[fKey] && GAME_CONFIG.fusions[fKey]?.req?.[wKey]
+        );
+        if (alreadyFused) continue;
+
+        if (!curLvl) {
+            // Hanya tawarkan senjata baru jika slot senjata belum penuh
+            if (activeWeaponCount < maxWeaponSlots) {
+                normalPool.push({
+                    weapon: wKey,
+                    nextLvl: '1',
+                    title: `Unlock: ${wCfg.name}`,
+                    desc: wCfg.levels['1'].desc,
+                    isEvo: false
+                });
+            }
+        } else if (curLvl === '1' || curLvl === '2') {
+            const next = String(Number(curLvl) + 1);
+            normalPool.push({
+                weapon: wKey,
+                nextLvl: next,
+                title: `${wCfg.name} Lv.${next}`,
+                desc: wCfg.levels[next].desc,
+                isEvo: false
+            });
+        } else if (curLvl === '3') {
+            // Tawarkan 2 cabang evolusi (4a dan 4b)
+            ['4a', '4b'].forEach(branch => {
+                if (wCfg.levels[branch]) {
+                    normalPool.push({
+                        weapon: wKey,
+                        nextLvl: branch,
+                        title: wCfg.levels[branch].name || `${wCfg.name} Lv.${branch.toUpperCase()}`,
+                        desc: wCfg.levels[branch].desc,
+                        isEvo: true
+                    });
+                }
+            });
+        } else if (curLvl === '4a' || curLvl === '5a' || curLvl === '4b' || curLvl === '5b') {
+            const num = Number(curLvl[0]) + 1;
+            const branch = curLvl[1];
+            const next = `${num}${branch}`;
+            if (wCfg.levels[next]) {
+                normalPool.push({
+                    weapon: wKey,
+                    nextLvl: next,
+                    title: wCfg.levels[next].name || `${wCfg.name} Lv.${next.toUpperCase()}`,
+                    desc: wCfg.levels[next].desc,
+                    isEvo: false
+                });
+            }
+        }
+    }
+
+    // Acak normalPool dan isi sisa kartu hingga 3 pilihan
+    normalPool.sort(() => Math.random() - 0.5);
+    for (const item of normalPool) {
+        if (choices.length < 3) {
+            choices.push(item);
+        }
+    }
+
+    // Fallback jika semua senjata & fusion sudah mentok MAX
+    if (choices.length === 0) {
+        choices.push(
+            { weapon: 'heal', title: 'Emergency Repair', desc: 'Memulihkan +2 HP pesawat secara instan.' },
+            { weapon: 'bonus', title: 'Score Overdrive', desc: 'Menambahkan +1000 Skor bonus.' }
+        );
+    }
+
+    GAME_STATE.skillChoices = choices;
 }
 
 function recordBuildProgress(key, label) {
@@ -120,7 +205,7 @@ function applySkillChoice(choice) {
     if (choice.isFusion) {
         playerFusions[choice.fusionKey] = true;
         consumeFusionMaterials(choice.fusionKey);
-        const cleanTitle = choice.title.replace('FUSION: ', '');
+        const cleanTitle = choice.title.replace(/^FUSION #\d+:\s*/, '');
         recordBuildProgress(`fusion_${choice.fusionKey}`, `${cleanTitle} (FUSION)`);
 
         spawnFloatingText(player.x, player.y - 45, `FUSION: ${cleanTitle}!`, '#f8fafc', 16);
@@ -302,6 +387,11 @@ function executeFlameThrower(ftLvl, ftCfg) {
 }
 
 function fireActiveWeapons() {
+    if (player.ultimateActive) {
+        weaponTimers.flameActive = 0;
+        lightningState.visualBolts = [];
+        return;
+    }
     // 1. LASER GUN
     if (playerSkills.laser && weaponTimers.laser <= 0) {
         const wCfg = GAME_CONFIG.weapons.laser;
@@ -418,15 +508,15 @@ function fireActiveWeapons() {
         const laserCfg = GAME_CONFIG.weapons.laser, laserLvl = laserCfg.levels['6b'];
         const arcCfg = GAME_CONFIG.weapons.arctic, arcLvl = arcCfg.levels['6a'];
 
-        if (weaponTimers.fusionMain <= 0) {
+        if ((weaponTimers.fusionCryo || 0) <= 0) {
             projectiles.push({
                 kind: 'arctic', isCryoMachine: true, x: player.x, y: player.y - 28, vx: 0, vy: -laserLvl.speed,
                 atk: laserCfg.baseAtk + arcLvl.atk * 0.5, slow: arcLvl.slow,
                 duration: arcCfg.freezeDuration, cd: arcCfg.freezeCd, color: '#38bdf8'
             });
-            weaponTimers.fusionMain = Math.max(1, Math.round(laserCfg.baseCooldown / laserLvl.shotsPerSec));
+            weaponTimers.fusionCryo = Math.max(1, Math.round(laserCfg.baseCooldown / laserLvl.shotsPerSec));
         }
-        if (weaponTimers.fusionSub <= 0) {
+        if ((weaponTimers.fusionCryoSub || 0) <= 0) {
             const allTargets = getAllActiveTargets().sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y));
             for (let k = 0; k < 2; k++) {
                 const target = allTargets[k] || allTargets[0];
@@ -441,7 +531,7 @@ function fireActiveWeapons() {
                     });
                 }
             }
-            weaponTimers.fusionSub = Math.round(arcLvl.seekerIntervalSec * 60);
+            weaponTimers.fusionCryoSub = Math.round(arcLvl.seekerIntervalSec * 60);
         }
     }
 
@@ -450,14 +540,14 @@ function fireActiveWeapons() {
         const heCfg = GAME_CONFIG.weapons.he, heLvl = heCfg.levels['6b'];
         const arcCfg = GAME_CONFIG.weapons.arctic, arcLvl = arcCfg.levels['6a'];
 
-        if (weaponTimers.fusionMain <= 0) {
+        if ((weaponTimers.fusionTimeStop || 0) <= 0) {
             projectiles.push({
                 kind: 'he', isTimeStopShot: true, x: player.x, y: player.y - 30, vx: 0, vy: -8.8,
                 atk: heCfg.baseAtk + 10, radius: heCfg.explosionRadius, lvlData: heLvl, color: '#60a5fa'
             });
-            weaponTimers.fusionMain = heCfg.baseCooldown;
+            weaponTimers.fusionTimeStop = heCfg.baseCooldown;
         }
-        if (weaponTimers.fusionSub <= 0) {
+        if ((weaponTimers.fusionTimeStopSub || 0) <= 0) {
             const target = findNearestTarget(player.x, player.y);
             if (target) {
                 const angle = Math.atan2(target.y - (player.y - 24), target.x - player.x);
@@ -469,12 +559,12 @@ function fireActiveWeapons() {
                     duration: arcCfg.freezeDuration, cd: arcCfg.freezeCd, color: '#60a5fa'
                 });
             }
-            weaponTimers.fusionSub = Math.round(arcLvl.seekerIntervalSec * 60);
+            weaponTimers.fusionTimeStopSub = Math.round(arcLvl.seekerIntervalSec * 60);
         }
     }
 
     // FUSION 3: DOOM
-    if (playerFusions.doom && weaponTimers.fusionMain <= 0) {
+    if (playerFusions.doom && (weaponTimers.fusionDoom || 0) <= 0) {
         const laserCfg = GAME_CONFIG.weapons.laser, laserLvl = laserCfg.levels['6a'];
         const heCfg = GAME_CONFIG.weapons.he, heLvl = heCfg.levels['6a'];
         const branches = 5, spread = 0.36, speed = 9.2;
@@ -486,20 +576,20 @@ function fireActiveWeapons() {
                 atk: heCfg.baseAtk * 1.15, radius: heCfg.explosionRadius * 1.1, lvlData: heLvl, color: '#ef4444'
             });
         }
-        weaponTimers.fusionMain = Math.max(1, Math.round(laserCfg.baseCooldown / laserLvl.shotsPerSec));
+        weaponTimers.fusionDoom = Math.max(1, Math.round(laserCfg.baseCooldown / laserLvl.shotsPerSec));
     }
 
-    // FUSION 4: INFERNO (Lightning Overload 6A + Pasif Burn permanen tanpa semburan api)
-    if (playerFusions.inferno && weaponTimers.fusionMain <= 0) {
+    // FUSION 4: INFERNO
+    if (playerFusions.inferno && (weaponTimers.fusionInferno || 0) <= 0) {
         const lgtCfg = GAME_CONFIG.weapons.lightning;
         executeLightningOverload(lgtCfg.levels['6a'], lgtCfg, { isInferno: true, isElectroDoom: false });
-        weaponTimers.fusionMain = lgtCfg.baseCooldown || 12;
+        weaponTimers.fusionInferno = lgtCfg.baseCooldown || 12;
     }
 
     // FUSION 5: ELECTRO DOOM
-    if (playerFusions.electroDoom && weaponTimers.fusionMain <= 0) {
+    if (playerFusions.electroDoom && (weaponTimers.fusionElectroDoom || 0) <= 0) {
         const lgtCfg = GAME_CONFIG.weapons.lightning;
         executeLightningOverload(lgtCfg.levels['6a'], lgtCfg, { isInferno: false, isElectroDoom: true });
-        weaponTimers.fusionMain = lgtCfg.baseCooldown || 12;
+        weaponTimers.fusionElectroDoom = lgtCfg.baseCooldown || 12;
     }
 }
