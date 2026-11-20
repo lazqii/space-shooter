@@ -197,6 +197,7 @@ function triggerHeExplosion(proj, directTarget) {
             const isCrit = proj.forceCrit ? true : (Math.random() < lvl.critRate);
             const finalDmg = isCrit ? proj.atk * lvl.critDmg : proj.atk;
             applyDamageToTarget(target, finalDmg, isCrit ? '#facc15' : '#fdba74', isCrit);
+            recordWeaponDamage('he', finalDmg);
 
             if (!target.status) updateStatusEffects(target);
 
@@ -224,10 +225,12 @@ function handleProjectileImpact(proj, target) {
     } else if (proj.kind === 'arctic' || proj.kind === 'arctic_seeker') {
         const isSeeker = proj.kind === 'arctic_seeker';
         applyDamageToTarget(target, proj.atk, isSeeker ? '#22d3ee' : '#a5f3fc', isSeeker);
+        recordWeaponDamage('artic', finalDmg);
         applyFreezeToTarget(target, proj.slow, proj.duration, proj.cd);
         createExplosion(proj.x, proj.y, ['#67e8f9', '#ffffff'], isSeeker ? 12 : 6);
     } else {
         applyDamageToTarget(target, proj.atk, '#bae6fd', false);
+        recordWeaponDamage('laser', finalDmg);
         createExplosion(proj.x, proj.y, ['#38bdf8', '#ffffff'], 4);
     }
 }
@@ -262,6 +265,7 @@ function updateProjectiles() {
                 for (const t of getAllActiveTargets()) {
                     if (Math.hypot(t.x - p.x, t.y - p.y) < p.radius + t.width * 0.35) {
                         applyDamageToTarget(t, Math.round(p.atk * 0.35), '#d8b4fe', false);
+                        recordWeaponDamage('shockwave', finalDmg);
                         createExplosion(t.x, t.y, ['#c084fc', '#ffffff'], 3);
                     }
                 }
@@ -280,6 +284,7 @@ function updateProjectiles() {
                 if (dist < hitRange && !p.hitTargets.includes(t)) {
                     p.hitTargets.push(t);
                     applyDamageToTarget(t, p.atk, '#c084fc', false);
+                    recordWeaponDamage('shockwave', finalDmg);
                     createExplosion(t.x, t.y, ['#c084fc', '#e879f9', '#ffffff'], 6);
                     if (t !== boss) {
                         t.y = Math.max(-20, t.y - p.knockback);
@@ -299,6 +304,14 @@ function updateProjectiles() {
         if (p.y < -30 || p.y > canvas.height + 30 || p.x < -30 || p.x > canvas.width + 30) {
             projectiles.splice(i, 1);
         }
+    }
+}
+
+function recordWeaponDamage(weaponKey, amount) {
+    if (!GAME_STATE.weaponDamageStats) return;
+    const key = weaponKey || 'laser';
+    if (GAME_STATE.weaponDamageStats[key] !== undefined) {
+        GAME_STATE.weaponDamageStats[key] += Math.max(0, Math.round(amount));
     }
 }
 

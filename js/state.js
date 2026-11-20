@@ -59,7 +59,19 @@ const GAME_STATE = {
     bossesKilled: 0,
     playTimeFrames: 0,
     buildHistory: {},
-    shareFeedbackTimer: 0
+    shareFeedbackTimer: 0,
+
+    encyclopediaTab: 'WEAPONS',
+    encyclopediaSelectedIdx: 0,
+    pauseSubScreen: 'MAIN',
+    weaponDamageStats: {
+        laser: 0,
+        he: 0,
+        lightning: 0,
+        arctic: 0,
+        shockwave: 0,
+        flamethrower: 0
+    },
 };
 
 const player = {
