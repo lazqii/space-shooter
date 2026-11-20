@@ -626,23 +626,30 @@ function render() {
             const backCurve = Math.sin(Math.min(1, progress * 1.25) * Math.PI);
 
             if (backCurve > 0.02) {
-                const originX = boss.x + (isLeft ? -boss.width * 0.25 : boss.width * 0.25);
-                const originY = boss.y - boss.height * 0.12;
+                const originX = boss.x + (isLeft ? -boss.width * 0.22 : boss.width * 0.22);
+                const originY = boss.y - boss.height * 0.14;
 
                 ctx.save();
                 ctx.translate(originX, originY);
-                if (isLeft) ctx.scale(-1, 1);
 
-                ctx.rotate(-0.15 + backCurve * 0.5);
-                const w1 = 135 * (0.7 + backCurve * 0.5);
-                const h1 = 175 * (0.7 + backCurve * 0.6);
+                // Arahkan ujung runcing tentakel keluar ke samping-atas
+                if (isLeft) {
+                    ctx.rotate(0.32 + backCurve * 0.25);
+                } else {
+                    ctx.rotate(-0.32 - backCurve * 0.25);
+                    ctx.scale(-1, 1);
+                }
+
+                const w1 = 230 * (0.4 + backCurve * 0.75); // Panjang menjulur keluar
+                const h1 = 62;                             // Ketebalan tentakel
 
                 if (hasTentacleImg) {
                     ctx.imageSmoothingEnabled = false;
-                    ctx.drawImage(assets.specialBossTentacle, -w1 * 0.35, -h1 * 0.85, w1, h1);
+                    // Pangkal rata (kanan gambar) menempel di balik badan bos
+                    ctx.drawImage(assets.specialBossTentacle, -w1, -h1 * 0.5, w1, h1);
                 } else {
                     ctx.fillStyle = '#110e2e';
-                    ctx.fillRect(-14, -h1 * 0.8, 28, h1 * 0.8);
+                    ctx.fillRect(-w1, -h1 * 0.3, w1, h1 * 0.6);
                 }
                 ctx.restore();
             }
@@ -689,10 +696,9 @@ function render() {
 
                 if (thrustCurve > 0.02) {
                     const isLeft = boss.tentacleAttack.side === 'left';
-                    const edgeX = isLeft ? -10 : canvas.width + 10;
-                    const anchorY = boss.tentacleAttack.y - 40;
+                    const edgeX = isLeft ? -12 : canvas.width + 12;
+                    const anchorY = boss.tentacleAttack.y - 25;
 
-                    // Hitung sudut murni dari titik keluar di tepi layar menuju pusat lingkaran target
                     const dx = boss.tentacleAttack.x - edgeX;
                     const dy = boss.tentacleAttack.y - anchorY;
                     const distToTarget = Math.hypot(dx, dy);
@@ -701,31 +707,31 @@ function render() {
                     ctx.save();
                     ctx.translate(edgeX, anchorY);
 
-                    // Putar sumbu -Y (atas gambar) agar mengarah lurus ke lingkaran target
-                    // Dikurangi 0.45 rad karena ujung gambar tentakel aslinya melengkung ke kanan atas
-                    ctx.rotate(angleToTarget + Math.PI / 2 - (isLeft ? 0.45 : -0.45));
-                    if (!isLeft) ctx.scale(-1, 1);
+                    // Efek sedikit mengayun saat menghantam
+                    const whipSwing = (1 - thrustCurve) * (isLeft ? -0.18 : 0.18);
 
-                    // Tambahkan efek ayunan cambukan saat menyabet
-                    const whipSwing = (1 - thrustCurve) * -0.25;
-                    ctx.rotate(whipSwing);
+                    if (isLeft) {
+                        ctx.rotate(angleToTarget + whipSwing);
+                        ctx.scale(-1, 1); // Flip horizontal agar ujung runcing (kiri gambar) mengarah ke kanan
+                    } else {
+                        ctx.rotate(angleToTarget + Math.PI + whipSwing);
+                    }
 
-                    const drawW = 140;
-                    // Perpanjang 1.45x dari jarak target supaya ujung runcingnya benar-benar melewati titik target
-                    const drawH = Math.max(60, (distToTarget * 1.45 + 60) * thrustCurve);
+                    const drawW = Math.max(50, (distToTarget + 45) * thrustCurve); // Panjang pas sampai target
+                    const drawH = 84;                                             // Ketebalan proporsional
 
                     if (hasTentacleImg) {
                         ctx.imageSmoothingEnabled = false;
-                        // Pivot tepat di pangkal bawah tengah gambar (-drawW * 0.5, -drawH)
-                        ctx.drawImage(assets.specialBossTentacle, -drawW * 0.5, -drawH, drawW, drawH);
+                        // Pangkal rata terkunci di luar tepi layar, ujung runcing menusuk ke target
+                        ctx.drawImage(assets.specialBossTentacle, -drawW, -drawH * 0.5, drawW, drawH);
                     } else {
                         ctx.fillStyle = '#110e2e';
                         ctx.strokeStyle = '#be123c';
                         ctx.lineWidth = 4;
                         ctx.beginPath();
-                        ctx.moveTo(-22, 0);
-                        ctx.lineTo(0, -drawH);
-                        ctx.lineTo(22, 0);
+                        ctx.moveTo(0, -20);
+                        ctx.lineTo(-drawW, 0);
+                        ctx.lineTo(0, 20);
                         ctx.closePath();
                         ctx.fill();
                         ctx.stroke();

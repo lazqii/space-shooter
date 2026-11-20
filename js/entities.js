@@ -107,6 +107,8 @@ function spawnBoss() {
             maxHp: Math.round(baseBossHp * spCfg.hpMultiplier),
             expReward: Math.round(baseBossExp * spCfg.expMultiplier),
             scoreReward: Math.round(baseBossScore * spCfg.scoreMultiplier),
+            speedX: 1.15,
+            dirX: Math.random() < 0.5 ? -1 : 1,
             introTimer: 110,
             hitFlash: 0,
             status: null,
@@ -380,6 +382,16 @@ function updateEnemiesAndBoss() {
             // ==========================================
             // AI SPECIAL BOSS (DIAM DI TEMPAT + 4 SKILL)
             // ==========================================
+            boss.x += (boss.speedX || 1.15) * (boss.dirX || 1) * timeMult;
+            const margin = boss.width * 0.42;
+            if (boss.x <= margin) {
+                boss.x = margin;
+                boss.dirX = 1;
+            } else if (boss.x >= canvas.width - margin) {
+                boss.x = canvas.width - margin;
+                boss.dirX = -1;
+            }
+
             const spCfg = GAME_CONFIG.specialBoss;
             const halfW = boss.width / 2;
             const halfH = boss.height / 2;
