@@ -92,7 +92,7 @@ const GAME_CONFIG = {
         name: 'ABYSSAL BROODMOTHER',
         width: 360,
         height: 250,
-        spawnChance: 0.20,        // 10% di wave biasa
+        spawnChance: 0.10,        // 10% di wave biasa
         guaranteedEveryWave: 10,  // 100% muncul di wave kelipatan 10
         hpMultiplier: 2.2,        // 2.2x HP boss biasa di wave tersebut
         expMultiplier: 2.0,       // 2x EXP boss biasa di wave tersebut
