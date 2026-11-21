@@ -55,6 +55,32 @@ function returnToMainMenu() {
     resetJoystick();
 }
 
+function getSafeViewport() {
+    const padX = Math.max(22, Math.round(canvas.width * 0.055));
+    const padTop = Math.max(28, Math.round(canvas.height * 0.04));
+    const padBottom = Math.max(40, Math.round(canvas.height * 0.055));
+
+    const safeLeft = padX;
+    const safeRight = canvas.width - padX;
+    const safeW = safeRight - safeLeft;
+
+    const safeTop = padTop;
+    const safeBottom = canvas.height - padBottom;
+    const safeH = safeBottom - safeTop;
+
+    const blockH = Math.min(safeH, 640);
+    const blockTop = safeTop + Math.floor((safeH - blockH) / 2);
+    const blockBottom = blockTop + blockH;
+
+    return {
+        padX, padTop, padBottom,
+        safeLeft, safeRight, safeW,
+        safeTop, safeBottom, safeH,
+        blockTop, blockBottom, blockH,
+        cx: canvas.width / 2
+    };
+}
+
 // ==========================================
 // HELPER TEKS & PLACEHOLDER IKON SCI-FI
 // ==========================================
@@ -177,21 +203,27 @@ function drawWeaponPlaceholderIcon(key, cx, cy, size, color = '#38bdf8') {
     ctx.restore();
 }
 
+
+
 // ==========================================
 // TATA LETAK TOMBOL MENU, MODAL & PAUSE
 // ==========================================
 function getMainMenuLayout() {
-    const cx = canvas.width / 2;
-    const btnW = 280;
+    const v = getSafeViewport();
+    const btnW = Math.min(280, v.safeW);
     const btnH = 52;
-    const btnX = cx - btnW / 2;
-    const startY = canvas.height * 0.44;
+    const btnX = v.cx - btnW / 2;
+    const startY = v.blockTop + Math.round(v.blockH * 0.44);
 
     return {
-        cx,
+        v,
+        cx: v.cx,
+        shipY: v.blockTop + Math.round(v.blockH * 0.16),
+        titleY: v.blockTop + Math.round(v.blockH * 0.30),
+        subY: v.blockTop + Math.round(v.blockH * 0.36),
         startBtn: { x: btnX, y: startY, w: btnW, h: btnH },
-        hofBtn: { x: btnX, y: startY + 68, w: btnW, h: btnH },
-        bookBtn: { x: btnX, y: startY + 136, w: btnW, h: btnH }
+        hofBtn: { x: btnX, y: startY + 66, w: btnW, h: btnH },
+        bookBtn: { x: btnX, y: startY + 132, w: btnW, h: btnH }
     };
 }
 
