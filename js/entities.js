@@ -196,9 +196,10 @@ function triggerHeExplosion(proj, directTarget) {
         if (target === directTarget || dist <= hitRange) {
             const isCrit = proj.forceCrit ? true : (Math.random() < lvl.critRate);
             const finalDmg = isCrit ? proj.atk * lvl.critDmg : proj.atk;
-            applyDamageToTarget(target, finalDmg, isCrit ? '#facc15' : '#fdba74', isCrit);
-            recordWeaponDamage('he', finalDmg);
-
+            applyDamageToTarget(target, finalDmg, isCrit ? '#facc15' : '#fdba74', isCrit, 'he');
+            if (lvl.burnDmg) {
+                applyBurnToTarget(target, lvl.burnDmg, lvl.burnDurationSec, 'he');
+            }
             if (!target.status) updateStatusEffects(target);
 
             if (isTimeStop && target.status.timeStopCdTimer <= 0) {
@@ -224,13 +225,11 @@ function handleProjectileImpact(proj, target) {
         triggerHeExplosion(proj, target);
     } else if (proj.kind === 'arctic' || proj.kind === 'arctic_seeker') {
         const isSeeker = proj.kind === 'arctic_seeker';
-        applyDamageToTarget(target, proj.atk, isSeeker ? '#22d3ee' : '#a5f3fc', isSeeker);
-        recordWeaponDamage('artic', finalDmg);
+        applyDamageToTarget(target, proj.atk, isSeeker ? '#22d3ee' : '#a5f3fc', isSeeker, 'arctic');
         applyFreezeToTarget(target, proj.slow, proj.duration, proj.cd);
         createExplosion(proj.x, proj.y, ['#67e8f9', '#ffffff'], isSeeker ? 12 : 6);
     } else {
-        applyDamageToTarget(target, proj.atk, '#bae6fd', false);
-        recordWeaponDamage('laser', finalDmg);
+        applyDamageToTarget(target, proj.atk, '#bae6fd', false, 'laser');
         createExplosion(proj.x, proj.y, ['#38bdf8', '#ffffff'], 4);
     }
 }
@@ -264,8 +263,8 @@ function updateProjectiles() {
             if (p.damageTimer % 14 === 0) {
                 for (const t of getAllActiveTargets()) {
                     if (Math.hypot(t.x - p.x, t.y - p.y) < p.radius + t.width * 0.35) {
-                        applyDamageToTarget(t, Math.round(p.atk * 0.35), '#d8b4fe', false);
-                        recordWeaponDamage('shockwave', finalDmg);
+                        const vortexDmg = Math.round(p.atk * 0.35);
+                        applyDamageToTarget(t, vortexDmg, '#d8b4fe', false, 'shockwave');
                         createExplosion(t.x, t.y, ['#c084fc', '#ffffff'], 3);
                     }
                 }
@@ -283,8 +282,7 @@ function updateProjectiles() {
                 const hitRange = (p.arcWidth * 0.55) + (t.width * 0.35);
                 if (dist < hitRange && !p.hitTargets.includes(t)) {
                     p.hitTargets.push(t);
-                    applyDamageToTarget(t, p.atk, '#c084fc', false);
-                    recordWeaponDamage('shockwave', finalDmg);
+                    applyDamageToTarget(t, p.atk, '#c084fc', false, 'shockwave');
                     createExplosion(t.x, t.y, ['#c084fc', '#e879f9', '#ffffff'], 6);
                     if (t !== boss) {
                         t.y = Math.max(-20, t.y - p.knockback);

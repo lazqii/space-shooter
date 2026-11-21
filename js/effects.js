@@ -26,7 +26,7 @@ function createExplosion(x, y, colors, count = 16) {
     }
 }
 
-function applyDamageToTarget(target, amount, color = '#ffffff', isCrit = false) {
+function applyDamageToTarget(target, amount, color = '#ffffff', isCrit = false, weaponKey = null) {
     if (target === boss && boss && boss.introTimer > 0) {
         target.hitFlash = 3;
         spawnFloatingText(target.x, target.y - 20, 'IMMUNE', '#facc15', 13);
@@ -36,14 +36,22 @@ function applyDamageToTarget(target, amount, color = '#ffffff', isCrit = false) 
 
     target.hp -= amount;
     target.hitFlash = 4;
+
+    if (weaponKey && typeof recordWeaponDamage === 'function') {
+        recordWeaponDamage(weaponKey, amount);
+    }
+
     const label = isCrit ? `${Math.round(amount)}!` : `${Math.round(amount)}`;
     spawnFloatingText(target.x, target.y - 15, label, color, isCrit ? 16 : 12);
 }
 
-function applyBurnToTarget(target, dmgPerHalfSec, durationSec) {
+function applyBurnToTarget(target, dmgPerHalfSec, durationSec, sourceWeapon = 'flamethrower') {
     if (target === boss && boss && boss.introTimer > 0) return;
     if (!target.status) updateStatusEffects(target);
-    target.status.burnHalfSecDmg = Math.max(target.status.burnHalfSecDmg || 0, dmgPerHalfSec);
+    if (dmgPerHalfSec >= (target.status.burnHalfSecDmg || 0)) {
+        target.status.burnHalfSecDmg = dmgPerHalfSec;
+        target.status.burnSource = sourceWeapon;
+    }
     target.status.burnTimer = Math.max(target.status.burnTimer || 0, Math.round(durationSec * 60));
 }
 
@@ -64,6 +72,7 @@ function updateStatusEffects(target) {
             burnTimer: 0,
             burnTickTimer: 0,
             burnHalfSecDmg: 0,
+            burnSource: 'flamethrower',
             freezeTimer: 0,
             freezeAccumulated: 0,
             freezeCdTimer: 0,
@@ -85,7 +94,7 @@ function updateStatusEffects(target) {
         st.burnTickTimer++;
         if (st.burnTickTimer >= 30) {
             st.burnTickTimer = 0;
-            applyDamageToTarget(target, st.burnHalfSecDmg, '#fb923c', false);
+            applyDamageToTarget(target, st.burnHalfSecDmg, '#fb923c', false, st.burnSource || 'flamethrower');
             createExplosion(target.x, target.y, ['#f97316', '#facc15'], 5);
         }
         if (st.burnTimer <= 0) {
@@ -100,7 +109,7 @@ function updateStatusEffects(target) {
         const heLvl = playerSkills.he;
         if (heLvl === '6b' && st.freezeAccumulated > 4.0 && st.shatterCdTimer <= 0) {
             const trueDmg = GAME_CONFIG.weapons.he.baseAtk * GAME_CONFIG.weapons.he.levels['6b'].shatterTrueDmgPct;
-            applyDamageToTarget(target, trueDmg, '#22d3ee', true);
+            applyDamageToTarget(target, trueDmg, '#22d3ee', true, 'he');
             spawnFloatingText(target.x, target.y - 34, 'SHATTER!', '#67e8f9', 14);
             createExplosion(target.x, target.y, ['#22d3ee', '#ffffff'], 20);
             st.shatterCdTimer = GAME_CONFIG.weapons.he.levels['6b'].shatterCd * 60;

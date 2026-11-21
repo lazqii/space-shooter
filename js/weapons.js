@@ -318,8 +318,7 @@ function executeLightningOverload(lvlData, wCfg, options = {}) {
         createExplosion(primary.x, primary.y, flameColors, 4 + Math.min(8, currentStacks * 2));
     }
 
-    applyDamageToTarget(primary, finalAtk, options.isInferno ? '#fb923c' : '#fde047', false);
-    createExplosion(primary.x, primary.y, ['#eab308', '#fef08a'], 4);
+    applyDamageToTarget(primary, finalAtk, options.isInferno ? '#fb923c' : '#fde047', false, 'lightning'); createExplosion(primary.x, primary.y, ['#eab308', '#fef08a'], 4);
     lightningState.visualBolts.push({
         x1: player.x, y1: player.y - 24,
         x2: primary.x, y2: primary.y,
@@ -334,7 +333,7 @@ function executeLightningOverload(lvlData, wCfg, options = {}) {
             const nextNode = findNearestTarget(lastNode.x, lastNode.y, hitTargets, wCfg.chainRadius || 155);
             if (!nextNode) break;
             hitTargets.push(nextNode);
-            applyDamageToTarget(nextNode, finalAtk, '#facc15', false);
+            applyDamageToTarget(nextNode, finalAtk, '#facc15', false, 'lightning');
             createExplosion(nextNode.x, nextNode.y, ['#eab308', '#ffffff'], 3);
             lightningState.visualBolts.push({
                 x1: lastNode.x, y1: lastNode.y,
@@ -366,8 +365,8 @@ function executeFlameThrower(ftLvl, ftCfg) {
                 if (dy < 10 && dist <= coneRange + t.width * 0.35) {
                     const angleFromUp = Math.abs(Math.atan2(dx, -dy));
                     if (angleFromUp <= halfSpread) {
-                        applyDamageToTarget(t, ftLvl.atk, '#fb923c', false);
-                        applyBurnToTarget(t, ftLvl.burnDmg, ftLvl.burnDurationSec);
+                        applyDamageToTarget(t, ftLvl.atk, '#fb923c', false, 'flamethrower');
+                        applyBurnToTarget(t, ftLvl.burnDmg, ftLvl.burnDurationSec, 'flamethrower');
                     }
                 }
             }
