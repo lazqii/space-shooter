@@ -1,11 +1,12 @@
 // js/effects.js - Sistem Status (Burn, Freeze, TimeStop, Shatter), Damage & Partikel
 
-function spawnFloatingText(x, y, text, color = '#ffffff', size = 13) {
+function spawnFloatingText(x, y, text, color = '#ffffff', size = 13, gradientBottom = null) {
     floatingTexts.push({
         x: x + (Math.random() - 0.5) * 16,
         y,
         text,
         color,
+        gradientBottom,
         size,
         life: 40
     });
@@ -62,7 +63,7 @@ function applyFreezeToTarget(target, slowAmount, durationSec, cdSec) {
         target.status.slowFactor = Math.max(target.status.slowFactor || 0, slowAmount);
         target.status.freezeTimer = Math.round(durationSec * 60);
         target.status.freezeCdTimer = Math.round(cdSec * 60);
-        spawnFloatingText(target.x, target.y - 28, 'FROZEN', '#67e8f9', 12);
+        spawnFloatingText(target.x, target.y - 28, 'FREZEE', '#67e8f9', 12);
     }
 }
 

@@ -207,7 +207,7 @@ function triggerHeExplosion(proj, directTarget) {
                 const durationSec = isBoss ? 1.5 : 3.0;
                 target.status.timeStopTimer = Math.round(durationSec * 60);
                 target.status.timeStopCdTimer = Math.round(4.0 * 60);
-                spawnFloatingText(target.x, target.y - 32, isBoss ? 'TIME STOP (1.5s)!' : 'TIME STOP (3s)!', '#60a5fa', 14);
+                spawnFloatingText(target.x, target.y - 32, 'FROZEN!', '#ffffff', 14, '#67e8f9');
             }
 
             if (lvl.burnPct) {

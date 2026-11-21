@@ -840,9 +840,24 @@ function render() {
     ctx.globalAlpha = 1;
 
     for (const ft of floatingTexts) {
-        ctx.fillStyle = ft.color;
         ctx.font = `bold ${ft.size}px monospace`;
         ctx.textAlign = 'center';
+        if (ft.gradientBottom) {
+            const grad = ctx.createLinearGradient(0, ft.y - ft.size, 0, ft.y + 2);
+            grad.addColorStop(0, ft.color || '#ffffff'); // Putih di bagian atas
+            grad.addColorStop(0.45, '#67e8f9');          // Biru sedang di tengah
+            grad.addColorStop(1, ft.gradientBottom);     // Biru gelap (#1e3a8a) di bawah
+
+            // Garis tepi
+            // ctx.strokeStyle = 'rgba(2, 6, 23, 0.92)';
+            // ctx.lineWidth = 3;
+            // ctx.strokeText(ft.text, ft.x, ft.y);
+
+            ctx.fillStyle = grad;
+        } else {
+            ctx.fillStyle = ft.color;
+        }
+
         ctx.fillText(ft.text, ft.x, ft.y);
     }
 
