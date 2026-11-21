@@ -440,5 +440,12 @@ const GAME_CONFIG = {
             desc: 'Setiap peningkatan Damage dari Lightning: Overload akan memicu ledakan critical HE Cannon',
             color: '#cbd5e1'
         }
-    }
+    },
+
+    ultimateRules: {
+        maxActiveUltimates: 1
+    },
+    ultimates: {
+        // Coming soon
+    },
 };

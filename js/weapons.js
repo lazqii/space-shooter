@@ -103,7 +103,7 @@ function triggerSkillSelection() {
 
     const choices = [];
 
-    // 1. Masukkan semua Fusion yang syaratnya sudah terpenuhi (bisa lebih dari 1 fusion)
+    //Fusion dibatasi maksimal 2
     const readyFusions = getAvailableFusions();
     for (const fChoice of readyFusions) {
         if (choices.length < 3) {
@@ -111,35 +111,43 @@ function triggerSkillSelection() {
         }
     }
 
-    // 2. Bangun daftar upgrade senjata biasa untuk mengisi sisa slot kartu
+    //Ultimate Weapon maksimal 1
+    const maxUltimates = GAME_CONFIG.ultimateRules?.maxActiveUltimates ?? 1;
+    if (!playerUltimate && maxUltimates > 0 && GAME_CONFIG.ultimates) {
+        for (const [uKey, uCfg] of Object.entries(GAME_CONFIG.ultimates)) {
+            if (uCfg.comingSoon) continue;
+            if (GAME_STATE.playerLevel >= (uCfg.minLevel || 15) && choices.length < 3) {
+                choices.push({
+                    isUltimate: true,
+                    ultimateKey: uKey,
+                    title: `ULTIMATE: ${uCfg.name}`,
+                    desc: uCfg.desc,
+                    color: uCfg.color || '#f43f5e'
+                });
+            }
+        }
+    }
+
     const normalPool = [];
     const allWeaponKeys = Object.keys(GAME_CONFIG.weapons);
-
-    // Hitung jumlah senjata aktif saat ini (termasuk yang sudah melebur jadi fusion)
-    const activeWeaponCount = allWeaponKeys.filter(k => playerSkills[k] !== null).length;
-    const maxWeaponSlots = 4; // Maksimal 4 slot senjata non-fusion di tangan sekaligus
 
     for (const wKey of allWeaponKeys) {
         const wCfg = GAME_CONFIG.weapons[wKey];
         const curLvl = playerSkills[wKey];
 
-        // Cek apakah senjata ini sudah dilebur ke dalam salah satu Fusion yang aktif
         const alreadyFused = Object.keys(playerFusions).some(
             fKey => playerFusions[fKey] && GAME_CONFIG.fusions[fKey]?.req?.[wKey]
         );
         if (alreadyFused) continue;
 
         if (!curLvl) {
-            // Hanya tawarkan senjata baru jika slot senjata belum penuh
-            if (activeWeaponCount < maxWeaponSlots) {
-                normalPool.push({
-                    weapon: wKey,
-                    nextLvl: '1',
-                    title: `Unlock: ${wCfg.name}`,
-                    desc: wCfg.levels['1'].desc,
-                    isEvo: false
-                });
-            }
+            normalPool.push({
+                weapon: wKey,
+                nextLvl: '1',
+                title: `Unlock: ${wCfg.name}`,
+                desc: wCfg.levels['1'].desc,
+                isEvo: false
+            });
         } else if (curLvl === '1' || curLvl === '2') {
             const next = String(Number(curLvl) + 1);
             normalPool.push({
@@ -150,7 +158,6 @@ function triggerSkillSelection() {
                 isEvo: false
             });
         } else if (curLvl === '3') {
-            // Tawarkan 2 cabang evolusi (4a dan 4b)
             ['4a', '4b'].forEach(branch => {
                 if (wCfg.levels[branch]) {
                     normalPool.push({
@@ -178,7 +185,6 @@ function triggerSkillSelection() {
         }
     }
 
-    // Acak normalPool dan isi sisa kartu hingga 3 pilihan
     normalPool.sort(() => Math.random() - 0.5);
     for (const item of normalPool) {
         if (choices.length < 3) {
@@ -186,10 +192,9 @@ function triggerSkillSelection() {
         }
     }
 
-    // Fallback jika semua senjata & fusion sudah mentok MAX
     if (choices.length === 0) {
         choices.push(
-            { weapon: 'heal', title: 'Emergency Repair', desc: 'Memulihkan +2 HP pesawat secara instan.' },
+            { weapon: 'heal', title: 'Emergency Repair', desc: 'Memulihkan +1 HP pesawat secara instan.' },
             { weapon: 'bonus', title: 'Score Overdrive', desc: 'Menambahkan +1000 Skor bonus.' }
         );
     }
@@ -202,7 +207,14 @@ function recordBuildProgress(key, label) {
 }
 
 function applySkillChoice(choice) {
-    if (choice.isFusion) {
+    if (choice.isUltimate) {
+        playerUltimate = choice.ultimateKey;
+        const uCfg = GAME_CONFIG.ultimates[choice.ultimateKey];
+        recordBuildProgress(`ult_${choice.ultimateKey}`, `${uCfg.name} (ULTIMATE)`);
+        spawnFloatingText(player.x, player.y - 45, `ULTIMATE: ${uCfg.name}!`, '#f43f5e', 16);
+        createExplosion(player.x, player.y, ['#f43f5e', '#facc15', '#ffffff'], 36);
+        GAME_STATE.screenShake = 16;
+    } else if (choice.isFusion) {
         playerFusions[choice.fusionKey] = true;
         consumeFusionMaterials(choice.fusionKey);
         const cleanTitle = choice.title.replace(/^FUSION #\d+:\s*/, '');
@@ -212,7 +224,7 @@ function applySkillChoice(choice) {
         createExplosion(player.x, player.y, ['#e2e8f0', '#ffffff', '#94a3b8'], 32);
         GAME_STATE.screenShake = 14;
     } else if (choice.weapon === 'heal') {
-        player.hp = Math.min(GAME_CONFIG.player.maxHp, player.hp + 2);
+        player.hp = Math.min(GAME_CONFIG.player.maxHp, player.hp + 1);
     } else if (choice.weapon === 'bonus') {
         GAME_STATE.score += 1000;
     } else {

@@ -116,6 +116,8 @@ let weaponTimers = {
     fusionElectroDoom: 0
 };
 
+let playerUltimate = null;
+
 let playerFusions = {
     cryoMachine: false,
     timeStop: false,

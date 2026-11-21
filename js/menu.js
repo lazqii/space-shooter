@@ -896,11 +896,14 @@ function renderPauseOverlay() {
     const activeFusionCount = Object.values(playerFusions).filter(Boolean).length;
     const heLvl = playerSkills.he ? GAME_CONFIG.weapons.he.levels[playerSkills.he] : null;
 
+    const totalWeaponsAvailable = Object.keys(GAME_CONFIG.weapons).length;
+    const maxFusions = GAME_CONFIG.fusionRules?.maxActiveFusions ?? 2;
+
     const rightStats = [
-        { label: 'Active Weapons', val: `${activeWeaponCount} / 6`, color: '#38bdf8' },
-        { label: 'Active Fusions', val: `${activeFusionCount}`, color: '#c084fc' },
-        { label: 'HE Crit Rate', val: heLvl ? `${Math.round(heLvl.critRate * 100)}%` : '0%', color: '#fb923c' },
-        { label: 'Bosses Slain', val: `${GAME_STATE.bossesKilled}`, color: '#f43f5e' }
+        { label: 'Active Weapons', val: `${activeWeaponCount} / ${totalWeaponsAvailable}`, color: '#38bdf8' },
+        { label: 'Active Fusions', val: `${activeFusionCount} / ${maxFusions}`, color: '#c084fc' },
+        { label: 'Ultimate Slot', val: playerUltimate ? 'EQUIPPED' : '0 / 1 (SOON)', color: '#f43f5e' },
+        { label: 'Bosses Slain', val: `${GAME_STATE.bossesKilled}`, color: '#fb923c' }
     ];
 
     let statY = p.titleY + 134;

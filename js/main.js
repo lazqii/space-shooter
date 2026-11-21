@@ -51,6 +51,7 @@ function startGame() {
     player.hp = GAME_CONFIG.player.maxHp;
     player.hasShield = false;
     player.invulnTimer = 0;
+    playerUltimate = null;
     player.ultimateActive = false;
 
     boss = null;
