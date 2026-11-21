@@ -3,9 +3,10 @@
 function saveRunToHallOfFame() {
     if (GAME_STATE.score <= 0) return;
 
+    const currentMode = GAME_STATE.gameMode || 'ENDLESS';
     const buildList = Object.values(GAME_STATE.buildHistory);
     const entry = {
-        mode: GAME_STATE.gameMode,
+        mode: currentMode,
         score: GAME_STATE.score,
         wave: GAME_STATE.wave,
         level: GAME_STATE.playerLevel,
@@ -15,8 +16,17 @@ function saveRunToHallOfFame() {
     };
 
     GAME_STATE.hallOfFame.push(entry);
-    GAME_STATE.hallOfFame.sort((a, b) => b.score - a.score);
-    GAME_STATE.hallOfFame = GAME_STATE.hallOfFame.slice(0, 5);
+
+    const modes = ['STAGE', 'SURVIVAL', 'ENDLESS'];
+    let trimmed = [];
+    modes.forEach(m => {
+        const modeEntries = GAME_STATE.hallOfFame
+            .filter(r => (r.mode || 'ENDLESS') === m)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 5);
+        trimmed = trimmed.concat(modeEntries);
+    });
+    GAME_STATE.hallOfFame = trimmed;
 
     try {
         localStorage.setItem('space_shooter_hof', JSON.stringify(GAME_STATE.hallOfFame));
@@ -202,17 +212,17 @@ function getModeModalLayout() {
     };
 }
 
-function getModalHeaderLayout() {
-    const boxW = canvas.width - 48;
-    const boxH = Math.min(560, canvas.height - 110);
-    const boxX = 24;
-    const boxY = (canvas.height - boxH) / 2;
-
+function getFullScreenHofLayout() {
+    const pad = 20;
+    const tabW = (canvas.width - pad * 2 - 16) / 3;
     return {
-        boxX, boxY, boxW, boxH,
-        closeBtn: { x: boxX + boxW - 40, y: boxY + 14, w: 28, h: 28 },
-        tabFusions: { x: boxX + 16, y: boxY + 54, w: (boxW - 40) / 2, h: 32 },
-        tabWeapons: { x: boxX + 24 + (boxW - 40) / 2, y: boxY + 54, w: (boxW - 40) / 2, h: 32 }
+        closeBtn: { x: canvas.width - 52, y: 20, w: 34, h: 34 },
+        tabStage: { x: pad, y: 74, w: tabW, h: 36 },
+        tabSurvival: { x: pad + tabW + 8, y: 74, w: tabW, h: 36 },
+        tabEndless: { x: pad + (tabW + 8) * 2, y: 74, w: tabW, h: 36 },
+        listX: pad,
+        listY: 128,
+        listW: canvas.width - pad * 2
     };
 }
 
@@ -277,9 +287,16 @@ function handleMainMenuClick(x, y) {
     }
 
     if (GAME_STATE.menuModal === 'HALL_OF_FAME') {
-        const h = getModalHeaderLayout();
+        const h = getFullScreenHofLayout();
         if (isInsideRect(x, y, h.closeBtn)) {
             GAME_STATE.menuModal = null;
+        } else if (isInsideRect(x, y, h.tabStage)) {
+            GAME_STATE.hofTab = 'STAGE';
+        } else if (isInsideRect(x, y, h.tabSurvival)) {
+            GAME_STATE.hofTab = 'SURVIVAL';
+        } else if (isInsideRect(x, y, h.tabEndless)) {
+            GAME_STATE.hofTab = 'ENDLESS';
+            GAME_STATE.menuModal = 'HALL_OF_FAME';
         }
         return true;
     }
@@ -430,61 +447,94 @@ function renderModeSelectModal() {
 }
 
 function renderHallOfFameModal() {
-    ctx.fillStyle = 'rgba(2, 6, 23, 0.88)';
+    ctx.fillStyle = '#060913';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const h = getModalHeaderLayout();
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(h.boxX, h.boxY, h.boxW, h.boxH);
-    ctx.strokeStyle = '#64748b';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(h.boxX, h.boxY, h.boxW, h.boxH);
+    const h = getFullScreenHofLayout();
+    const activeTab = GAME_STATE.hofTab || 'ENDLESS';
 
+    // Header
     ctx.textAlign = 'left';
     ctx.fillStyle = '#facc15';
-    ctx.font = 'bold 17px monospace';
-    ctx.fillText('HALL OF FAME (TOP 5)', h.boxX + 20, h.boxY + 34);
+    ctx.font = 'bold 20px monospace';
+    ctx.fillText('HALL OF FAME', 20, 44);
+    drawStyledButton(h.closeBtn, 'X', '', '#0f172a', '#475569', '#f87171');
 
-    drawStyledButton(h.closeBtn, 'X', '', '#1e293b', '#64748b', '#f87171');
+    //Tab Submenu Mode
+    const tabs = [
+        { rect: h.tabStage, label: 'STAGE', active: activeTab === 'STAGE' },
+        { rect: h.tabSurvival, label: 'SURVIVAL', active: activeTab === 'SURVIVAL' },
+        { rect: h.tabEndless, label: 'ENDLESS', active: activeTab === 'ENDLESS' }
+    ];
+    tabs.forEach(t => {
+        drawStyledButton(
+            t.rect, t.label, '',
+            t.active ? '#0c2340' : '#0f172a',
+            t.active ? '#38bdf8' : '#334155',
+            t.active ? '#38bdf8' : '#64748b'
+        );
+    });
 
-    const records = GAME_STATE.hallOfFame;
+    // Filter rekor berdasarkan tab mode yang aktif
+    const records = GAME_STATE.hallOfFame
+        .filter(rec => (rec.mode || 'ENDLESS') === activeTab)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+
     if (records.length === 0) {
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = '13px monospace';
-        ctx.fillText('Belum ada rekor tersimpan.', canvas.width / 2, h.boxY + 180);
-        ctx.fillText('Selesaikan misi untuk masuk daftar!', canvas.width / 2, h.boxY + 205);
+        ctx.fillStyle = '#475569';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText(`[ BELUM ADA REKOR MODE ${activeTab} ]`, canvas.width / 2, canvas.height * 0.45);
+
+        ctx.font = '11px monospace';
+        const subMsg = activeTab === 'ENDLESS'
+            ? 'Selesaikan misi untuk masuk daftar peringkat Top 5!'
+            : 'Mode ini masih terkunci atau belum memiliki catatan misi.';
+        ctx.fillText(subMsg, canvas.width / 2, canvas.height * 0.45 + 24);
         return;
     }
 
-    let itemY = h.boxY + 72;
-    records.forEach((rec, idx) => {
-        ctx.fillStyle = idx === 0 ? '#1e293b' : '#0b1120';
-        ctx.fillRect(h.boxX + 16, itemY, h.boxW - 32, 76);
-        ctx.strokeStyle = idx === 0 ? '#facc15' : '#334155';
-        ctx.lineWidth = 1.2;
-        ctx.strokeRect(h.boxX + 16, itemY, h.boxW - 32, 76);
+    // Tinggi kartu responsif agar 5 peringkat muat rapi di berbagai layar
+    const availH = canvas.height - h.listY - 24;
+    const gap = 10;
+    const cardH = Math.min(92, Math.floor((availH - gap * 4) / 5));
 
+    const rankColors = ['#facc15', '#e2e8f0', '#fb923c', '#38bdf8', '#38bdf8'];
+    let itemY = h.listY;
+
+    records.forEach((rec, idx) => {
+        const accent = rankColors[idx] || '#38bdf8';
+
+        ctx.fillStyle = idx === 0 ? '#0f172a' : '#0b1120';
+        ctx.fillRect(h.listX, itemY, h.listW, cardH);
+        ctx.strokeStyle = idx === 0 ? '#facc15' : '#1e293b';
+        ctx.lineWidth = idx === 0 ? 1.8 : 1.2;
+        ctx.strokeRect(h.listX, itemY, h.listW, cardH);
+
+        // Baris 1: Peringkat & Skor + Tanggal
         ctx.textAlign = 'left';
-        ctx.fillStyle = idx === 0 ? '#facc15' : '#38bdf8';
+        ctx.fillStyle = accent;
         ctx.font = 'bold 14px monospace';
-        ctx.fillText(`#${idx + 1} · ${rec.score.toLocaleString('id-ID')} PTS`, h.boxX + 28, itemY + 24);
+        ctx.fillText(`#${idx + 1} · ${rec.score.toLocaleString('id-ID')} PTS`, h.listX + 14, itemY + 24);
 
         ctx.textAlign = 'right';
-        ctx.fillStyle = '#94a3b8';
+        ctx.fillStyle = '#64748b';
         ctx.font = '10.5px monospace';
-        ctx.fillText(`[${rec.mode || 'ENDLESS'}] ${rec.date || ''}`, h.boxX + h.boxW - 26, itemY + 24);
+        ctx.fillText(rec.date || '', h.listX + h.listW - 14, itemY + 24);
 
+        // Baris 2: Wave, Level & Waktu Bertahan
         ctx.textAlign = 'left';
         ctx.fillStyle = '#cbd5e1';
         ctx.font = '11px monospace';
-        ctx.fillText(`Wave ${rec.wave} · Lv.${rec.level} · Waktu ${rec.time}`, h.boxX + 28, itemY + 44);
+        ctx.fillText(`Wave ${rec.wave} · Lv.${rec.level} · Waktu ${rec.time}`, h.listX + 14, itemY + 46);
 
+        // Baris 3: Build Senjata Utama
         ctx.fillStyle = '#94a3b8';
         ctx.font = '10px monospace';
-        ctx.fillText(`Build: ${rec.build}`, h.boxX + 28, itemY + 62);
+        ctx.fillText(fitCanvasText(`Build: ${rec.build}`, h.listW - 28), h.listX + 14, itemY + 66);
 
-        itemY += 88;
+        itemY += cardH + gap;
     });
 }
 
