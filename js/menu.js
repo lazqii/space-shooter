@@ -55,6 +55,9 @@ function returnToMainMenu() {
     resetJoystick();
 }
 
+// ==========================================
+// SAFE VIEWPORT & MARGIN RESPONSIF PER LAYAR
+// ==========================================
 function getSafeViewport() {
     const padX = Math.max(22, Math.round(canvas.width * 0.055));
     const padTop = Math.max(28, Math.round(canvas.height * 0.04));
@@ -68,6 +71,7 @@ function getSafeViewport() {
     const safeBottom = canvas.height - padBottom;
     const safeH = safeBottom - safeTop;
 
+    // Batasi rentang vertikal maksimal agar elemen bawah tidak melorot di layar panjang (20:9)
     const blockH = Math.min(safeH, 640);
     const blockTop = safeTop + Math.floor((safeH - blockH) / 2);
     const blockBottom = blockTop + blockH;
@@ -203,10 +207,8 @@ function drawWeaponPlaceholderIcon(key, cx, cy, size, color = '#38bdf8') {
     ctx.restore();
 }
 
-
-
 // ==========================================
-// TATA LETAK TOMBOL MENU, MODAL & PAUSE
+// TATA LETAK RESPONSIF DI DALAM SAFE VIEWPORT
 // ==========================================
 function getMainMenuLayout() {
     const v = getSafeViewport();
@@ -228,71 +230,97 @@ function getMainMenuLayout() {
 }
 
 function getModeModalLayout() {
-    const boxW = canvas.width - 64;
-    const boxH = 360;
-    const boxX = 32;
-    const boxY = (canvas.height - boxH) / 2;
-    const btnW = boxW - 44;
-    const btnX = boxX + 22;
+    const v = getSafeViewport();
+    const boxW = Math.min(360, v.safeW);
+    const boxH = 352;
+    const boxX = v.cx - boxW / 2;
+    const boxY = v.blockTop + Math.floor((v.blockH - boxH) / 2);
+    const btnW = boxW - 40;
+    const btnX = boxX + 20;
 
     return {
         boxX, boxY, boxW, boxH,
         closeBtn: { x: boxX + boxW - 38, y: boxY + 12, w: 26, h: 26 },
-        stageBtn: { x: btnX, y: boxY + 75, w: btnW, h: 74 },
-        survivalBtn: { x: btnX, y: boxY + 163, w: btnW, h: 74 },
-        endlessBtn: { x: btnX, y: boxY + 251, w: btnW, h: 74 }
+        stageBtn: { x: btnX, y: boxY + 72, w: btnW, h: 74 },
+        survivalBtn: { x: btnX, y: boxY + 160, w: btnW, h: 74 },
+        endlessBtn: { x: btnX, y: boxY + 248, w: btnW, h: 74 }
     };
 }
 
 function getFullScreenHofLayout() {
-    const pad = 20;
-    const tabW = (canvas.width - pad * 2 - 16) / 3;
+    const v = getSafeViewport();
+    const tabGap = 8;
+    const tabW = (v.safeW - tabGap * 2) / 3;
+    const tabY = v.blockTop + 50;
+
     return {
-        closeBtn: { x: canvas.width - 52, y: 20, w: 34, h: 34 },
-        tabStage: { x: pad, y: 74, w: tabW, h: 36 },
-        tabSurvival: { x: pad + tabW + 8, y: 74, w: tabW, h: 36 },
-        tabEndless: { x: pad + (tabW + 8) * 2, y: 74, w: tabW, h: 36 },
-        listX: pad,
-        listY: 128,
-        listW: canvas.width - pad * 2
+        v,
+        headerY: v.blockTop + 24,
+        closeBtn: { x: v.safeRight - 34, y: v.blockTop + 2, w: 34, h: 34 },
+        tabStage: { x: v.safeLeft, y: tabY, w: tabW, h: 36 },
+        tabSurvival: { x: v.safeLeft + tabW + tabGap, y: tabY, w: tabW, h: 36 },
+        tabEndless: { x: v.safeLeft + (tabW + tabGap) * 2, y: tabY, w: tabW, h: 36 },
+        listX: v.safeLeft,
+        listY: tabY + 52,
+        listW: v.safeW,
+        listBottom: v.blockBottom
     };
 }
 
 function getFullScreenEncyclopediaLayout() {
-    const pad = 20;
-    const tabW = (canvas.width - pad * 2 - 16) / 3;
+    const v = getSafeViewport();
+    const tabGap = 8;
+    const tabW = (v.safeW - tabGap * 2) / 3;
+    const tabY = v.blockTop + 50;
+    const gridStartY = tabY + 52;
+    const cols = 3;
+    const gap = 10;
+    const cardW = (v.safeW - gap * 2) / 3;
+    const cardH = 104;
+    const detailY = gridStartY + cardH * 2 + gap + 16;
+
     return {
-        closeBtn: { x: canvas.width - 52, y: 20, w: 34, h: 34 },
-        tabWeapons: { x: pad, y: 74, w: tabW, h: 36 },
-        tabFusions: { x: pad + tabW + 8, y: 74, w: tabW, h: 36 },
-        tabArtifacts: { x: pad + (tabW + 8) * 2, y: 74, w: tabW, h: 36 },
-        gridStartX: pad,
-        gridStartY: 128,
-        cols: 3,
-        gap: 10,
-        cardW: (canvas.width - pad * 2 - 20) / 3,
-        cardH: 108,
-        detailBox: { x: pad, y: canvas.height - 195, w: canvas.width - pad * 2, h: 170 }
+        v,
+        headerY: v.blockTop + 24,
+        closeBtn: { x: v.safeRight - 34, y: v.blockTop + 2, w: 34, h: 34 },
+        tabWeapons: { x: v.safeLeft, y: tabY, w: tabW, h: 36 },
+        tabFusions: { x: v.safeLeft + tabW + tabGap, y: tabY, w: tabW, h: 36 },
+        tabArtifacts: { x: v.safeLeft + (tabW + tabGap) * 2, y: tabY, w: tabW, h: 36 },
+        gridStartX: v.safeLeft,
+        gridStartY,
+        cols,
+        gap,
+        cardW,
+        cardH,
+        detailBox: {
+            x: v.safeLeft,
+            y: detailY,
+            w: v.safeW,
+            h: Math.max(165, v.blockBottom - detailY)
+        }
     };
 }
 
 function getFullScreenPauseLayout() {
-    const cx = canvas.width / 2;
-    const bottomY = canvas.height - 84;
+    const v = getSafeViewport();
     const btnSize = 54;
-    const gap = 22;
+    const gap = 20;
     const totalRowW = btnSize * 4 + gap * 3;
-    const startX = cx - totalRowW / 2;
+    const startX = v.cx - totalRowW / 2;
+    const bottomRowY = v.blockBottom - btnSize;
+    const resumeW = Math.min(240, v.safeW);
 
     return {
-        cx,
-        chartBtn: { x: canvas.width - 58, y: 26, w: 38, h: 38 },
-        subCloseBtn: { x: canvas.width - 56, y: 24, w: 36, h: 36 },
-        resumeBtn: { x: cx - 120, y: bottomY - 72, w: 240, h: 48 },
-        ownedWeaponsBtn: { x: startX, y: bottomY, w: btnSize, h: btnSize },
-        artifactsBtn: { x: startX + (btnSize + gap), y: bottomY, w: btnSize, h: btnSize },
-        restartBtn: { x: startX + (btnSize + gap) * 2, y: bottomY, w: btnSize, h: btnSize },
-        quitBtn: { x: startX + (btnSize + gap) * 3, y: bottomY, w: btnSize, h: btnSize }
+        v,
+        cx: v.cx,
+        titleY: v.blockTop + 28,
+        chartBtn: { x: v.safeRight - 38, y: v.blockTop + 2, w: 38, h: 38 },
+        subCloseBtn: { x: v.safeRight - 36, y: v.blockTop + 2, w: 36, h: 36 },
+        resumeBtn: { x: v.cx - resumeW / 2, y: bottomRowY - 68, w: resumeW, h: 48 },
+        ownedWeaponsBtn: { x: startX, y: bottomRowY, w: btnSize, h: btnSize },
+        artifactsBtn: { x: startX + (btnSize + gap), y: bottomRowY, w: btnSize, h: btnSize },
+        restartBtn: { x: startX + (btnSize + gap) * 2, y: bottomRowY, w: btnSize, h: btnSize },
+        quitBtn: { x: startX + (btnSize + gap) * 3, y: bottomRowY, w: btnSize, h: btnSize }
     };
 }
 
@@ -328,7 +356,6 @@ function handleMainMenuClick(x, y) {
             GAME_STATE.hofTab = 'SURVIVAL';
         } else if (isInsideRect(x, y, h.tabEndless)) {
             GAME_STATE.hofTab = 'ENDLESS';
-            GAME_STATE.menuModal = 'HALL_OF_FAME';
         }
         return true;
     }
@@ -370,6 +397,7 @@ function handleMainMenuClick(x, y) {
     if (isInsideRect(x, y, menu.startBtn)) {
         GAME_STATE.menuModal = 'MODE_SELECT';
     } else if (isInsideRect(x, y, menu.hofBtn)) {
+        GAME_STATE.hofTab = 'ENDLESS';
         GAME_STATE.menuModal = 'HALL_OF_FAME';
     } else if (isInsideRect(x, y, menu.bookBtn)) {
         GAME_STATE.encyclopediaTab = 'WEAPONS';
@@ -407,7 +435,7 @@ function handlePauseMenuClick(x, y) {
 }
 
 // ==========================================
-// RENDER MAIN MENU, MODE SELECT & HALL OF FAME
+// RENDER MAIN MENU & MODE SELECT
 // ==========================================
 function renderMainMenuScreen() {
     ctx.fillStyle = 'rgba(6, 9, 19, 0.72)';
@@ -416,16 +444,16 @@ function renderMainMenuScreen() {
     const menu = getMainMenuLayout();
     const { cx } = menu;
 
-    drawSpriteEntity(null, assets.player, cx, canvas.height * 0.22, 64, 64, false, '#38bdf8');
+    drawSpriteEntity(null, assets.player, cx, menu.shipY, 64, 64, false, '#38bdf8');
 
     ctx.textAlign = 'center';
     ctx.fillStyle = '#38bdf8';
-    ctx.font = 'bold 34px monospace';
-    ctx.fillText('SPACE DEFENDER', cx, canvas.height * 0.33);
+    ctx.font = 'bold 32px monospace';
+    ctx.fillText('SPACE DEFENDER', cx, menu.titleY);
 
     ctx.fillStyle = '#94a3b8';
     ctx.font = '12px monospace';
-    ctx.fillText(`HIGH SCORE: ${GAME_STATE.highScore.toLocaleString('id-ID')}`, cx, canvas.height * 0.37);
+    ctx.fillText(`HIGH SCORE: ${GAME_STATE.highScore.toLocaleString('id-ID')}`, cx, menu.subY);
 
     drawStyledButton(menu.startBtn, 'START MISSION', '', '#0369a1', '#38bdf8', '#ffffff');
     drawStyledButton(menu.hofBtn, 'HALL OF FAME', '', '#0f172a', '#64748b', '#facc15');
@@ -454,7 +482,7 @@ function renderModeSelectModal() {
     ctx.textAlign = 'left';
     ctx.fillStyle = '#f8fafc';
     ctx.font = 'bold 17px monospace';
-    ctx.fillText('PILIH MODE MISI', m.boxX + 22, m.boxY + 34);
+    ctx.fillText('PILIH MODE MISI', m.boxX + 20, m.boxY + 34);
 
     drawStyledButton(m.closeBtn, 'X', '', '#1e293b', '#64748b', '#f87171');
 
@@ -478,21 +506,23 @@ function renderModeSelectModal() {
     );
 }
 
+// ==========================================
+// RENDER FULL-SCREEN HALL OF FAME (3 TAB MODE)
+// ==========================================
 function renderHallOfFameModal() {
     ctx.fillStyle = '#060913';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const h = getFullScreenHofLayout();
+    const { v } = h;
     const activeTab = GAME_STATE.hofTab || 'ENDLESS';
 
-    // Header
     ctx.textAlign = 'left';
     ctx.fillStyle = '#facc15';
     ctx.font = 'bold 20px monospace';
-    ctx.fillText('HALL OF FAME', 20, 44);
+    ctx.fillText('HALL OF FAME', v.safeLeft, h.headerY);
     drawStyledButton(h.closeBtn, 'X', '', '#0f172a', '#475569', '#f87171');
 
-    //Tab Submenu Mode
     const tabs = [
         { rect: h.tabStage, label: 'STAGE', active: activeTab === 'STAGE' },
         { rect: h.tabSurvival, label: 'SURVIVAL', active: activeTab === 'SURVIVAL' },
@@ -507,31 +537,29 @@ function renderHallOfFameModal() {
         );
     });
 
-    // Filter rekor berdasarkan tab mode yang aktif
     const records = GAME_STATE.hallOfFame
         .filter(rec => (rec.mode || 'ENDLESS') === activeTab)
         .sort((a, b) => b.score - a.score)
         .slice(0, 5);
 
     if (records.length === 0) {
+        const emptyY = h.listY + Math.floor((h.listBottom - h.listY) * 0.42);
         ctx.textAlign = 'center';
         ctx.fillStyle = '#475569';
         ctx.font = 'bold 14px monospace';
-        ctx.fillText(`[ BELUM ADA REKOR MODE ${activeTab} ]`, canvas.width / 2, canvas.height * 0.45);
+        ctx.fillText(`[ BELUM ADA REKOR MODE ${activeTab} ]`, v.cx, emptyY);
 
         ctx.font = '11px monospace';
         const subMsg = activeTab === 'ENDLESS'
             ? 'Selesaikan misi untuk masuk daftar peringkat Top 5!'
             : 'Mode ini masih terkunci atau belum memiliki catatan misi.';
-        ctx.fillText(subMsg, canvas.width / 2, canvas.height * 0.45 + 24);
+        ctx.fillText(subMsg, v.cx, emptyY + 24);
         return;
     }
 
-    // Tinggi kartu responsif agar 5 peringkat muat rapi di berbagai layar
-    const availH = canvas.height - h.listY - 24;
+    const availH = h.listBottom - h.listY;
     const gap = 10;
     const cardH = Math.min(92, Math.floor((availH - gap * 4) / 5));
-
     const rankColors = ['#facc15', '#e2e8f0', '#fb923c', '#38bdf8', '#38bdf8'];
     let itemY = h.listY;
 
@@ -544,7 +572,6 @@ function renderHallOfFameModal() {
         ctx.lineWidth = idx === 0 ? 1.8 : 1.2;
         ctx.strokeRect(h.listX, itemY, h.listW, cardH);
 
-        // Baris 1: Peringkat & Skor + Tanggal
         ctx.textAlign = 'left';
         ctx.fillStyle = accent;
         ctx.font = 'bold 14px monospace';
@@ -555,13 +582,11 @@ function renderHallOfFameModal() {
         ctx.font = '10.5px monospace';
         ctx.fillText(rec.date || '', h.listX + h.listW - 14, itemY + 24);
 
-        // Baris 2: Wave, Level & Waktu Bertahan
         ctx.textAlign = 'left';
         ctx.fillStyle = '#cbd5e1';
         ctx.font = '11px monospace';
         ctx.fillText(`Wave ${rec.wave} · Lv.${rec.level} · Waktu ${rec.time}`, h.listX + 14, itemY + 46);
 
-        // Baris 3: Build Senjata Utama
         ctx.fillStyle = '#94a3b8';
         ctx.font = '10px monospace';
         ctx.fillText(fitCanvasText(`Build: ${rec.build}`, h.listW - 28), h.listX + 14, itemY + 66);
@@ -578,13 +603,14 @@ function renderEncyclopediaModal() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const e = getFullScreenEncyclopediaLayout();
+    const { v } = e;
     const tab = GAME_STATE.encyclopediaTab || 'WEAPONS';
     const selectedIdx = GAME_STATE.encyclopediaSelectedIdx || 0;
 
     ctx.textAlign = 'left';
     ctx.fillStyle = '#f8fafc';
     ctx.font = 'bold 20px monospace';
-    ctx.fillText('ARMORY DATABASE', 20, 44);
+    ctx.fillText('ARMORY DATABASE', v.safeLeft, e.headerY);
     drawStyledButton(e.closeBtn, 'X', '', '#0f172a', '#475569', '#f87171');
 
     const tabs = [
@@ -602,12 +628,13 @@ function renderEncyclopediaModal() {
     });
 
     if (tab === 'ARTIFACTS') {
+        const emptyY = e.gridStartY + Math.floor((v.blockBottom - e.gridStartY) * 0.42);
         ctx.textAlign = 'center';
         ctx.fillStyle = '#475569';
         ctx.font = 'bold 14px monospace';
-        ctx.fillText('[ DATABASE ARTEFAK KOSONG ]', canvas.width / 2, canvas.height * 0.45);
+        ctx.fillText('[ DATABASE ARTEFAK KOSONG ]', v.cx, emptyY);
         ctx.font = '11px monospace';
-        ctx.fillText('Modul artefak akan tersedia pada pembaruan berikutnya.', canvas.width / 2, canvas.height * 0.45 + 24);
+        ctx.fillText('Modul artefak akan tersedia pada pembaruan berikutnya.', v.cx, emptyY + 24);
         return;
     }
 
@@ -630,12 +657,12 @@ function renderEncyclopediaModal() {
         ctx.lineWidth = isSelected ? 2.2 : 1.2;
         ctx.strokeRect(cardX, cardY, e.cardW, e.cardH);
 
-        drawWeaponPlaceholderIcon(item.key, cardX + e.cardW / 2, cardY + 38, 42, accentColor);
+        drawWeaponPlaceholderIcon(item.key, cardX + e.cardW / 2, cardY + 36, 40, accentColor);
 
         ctx.textAlign = 'center';
         ctx.fillStyle = isSelected ? '#f8fafc' : '#94a3b8';
         ctx.font = 'bold 10px monospace';
-        ctx.fillText(fitCanvasText(item.data.name, e.cardW - 10), cardX + e.cardW / 2, cardY + 76);
+        ctx.fillText(fitCanvasText(item.data.name, e.cardW - 10), cardX + e.cardW / 2, cardY + 73);
 
         const dots = tab === 'WEAPONS' ? 6 : 1;
         const dotGap = 8;
@@ -643,7 +670,7 @@ function renderEncyclopediaModal() {
         for (let d = 0; d < dots; d++) {
             ctx.fillStyle = isSelected ? '#4ade80' : '#334155';
             ctx.beginPath();
-            ctx.arc(startDotX + d * dotGap, cardY + 93, 2.3, 0, Math.PI * 2);
+            ctx.arc(startDotX + d * dotGap, cardY + 90, 2.3, 0, Math.PI * 2);
             ctx.fill();
         }
     });
@@ -702,19 +729,20 @@ function renderPauseOverlay() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const p = getFullScreenPauseLayout();
+    const { v } = p;
     const sub = GAME_STATE.pauseSubScreen || 'MAIN';
 
     if (sub === 'DAMAGE') {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#f8fafc';
-        ctx.font = 'bold 20px monospace';
-        ctx.fillText('COMBAT DAMAGE REPORT', p.cx, 48);
+        ctx.font = 'bold 19px monospace';
+        ctx.fillText('COMBAT DAMAGE REPORT', p.cx, p.titleY);
 
         drawStyledButton(p.subCloseBtn, 'X', '', '#0f172a', '#475569', '#f87171');
 
         ctx.fillStyle = '#94a3b8';
         ctx.font = '11.5px monospace';
-        ctx.fillText(`MODE: ${GAME_STATE.gameMode}  ·  WAVE ${GAME_STATE.wave}`, p.cx, 76);
+        ctx.fillText(`MODE: ${GAME_STATE.gameMode}  ·  WAVE ${GAME_STATE.wave}`, p.cx, p.titleY + 28);
 
         const stats = GAME_STATE.weaponDamageStats || {};
         const weaponKeys = ['laser', 'he', 'lightning', 'arctic', 'shockwave', 'flamethrower'];
@@ -730,27 +758,29 @@ function renderPauseOverlay() {
         const maxDmg = Math.max(1, ...activeList.map(a => a.dmg));
         const totalDmg = activeList.reduce((acc, cur) => acc + cur.dmg, 0);
 
-        let rowY = 120;
-        const barMaxW = canvas.width - 110;
+        let rowY = p.titleY + 72;
+        const iconCenterX = v.safeLeft + 18;
+        const barStartX = v.safeLeft + 46;
+        const barMaxW = v.safeRight - barStartX;
 
         activeList.forEach(item => {
-            drawWeaponPlaceholderIcon(item.key, 44, rowY + 16, 32, item.color);
+            drawWeaponPlaceholderIcon(item.key, iconCenterX, rowY + 16, 32, item.color);
 
             ctx.textAlign = 'left';
             ctx.fillStyle = '#f8fafc';
             ctx.font = 'bold 12px monospace';
-            ctx.fillText(item.name, 74, rowY + 12);
+            ctx.fillText(item.name, barStartX, rowY + 12);
 
             ctx.textAlign = 'right';
             ctx.fillStyle = '#facc15';
             ctx.font = 'bold 12px monospace';
             const pct = totalDmg > 0 ? Math.round((item.dmg / totalDmg) * 100) : 0;
-            ctx.fillText(`${item.dmg.toLocaleString('id-ID')} (${pct}%)`, canvas.width - 28, rowY + 12);
+            ctx.fillText(`${item.dmg.toLocaleString('id-ID')} (${pct}%)`, v.safeRight, rowY + 12);
 
             ctx.fillStyle = '#1e293b';
-            ctx.fillRect(74, rowY + 20, barMaxW, 8);
+            ctx.fillRect(barStartX, rowY + 20, barMaxW, 8);
             ctx.fillStyle = item.color;
-            ctx.fillRect(74, rowY + 20, Math.max(4, (item.dmg / maxDmg) * barMaxW), 8);
+            ctx.fillRect(barStartX, rowY + 20, Math.max(4, (item.dmg / maxDmg) * barMaxW), 8);
 
             rowY += 56;
         });
@@ -758,7 +788,7 @@ function renderPauseOverlay() {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#64748b';
         ctx.font = '11px monospace';
-        ctx.fillText(`TOTAL DAMAGE DIBERIKAN: ${totalDmg.toLocaleString('id-ID')}`, p.cx, canvas.height - 40);
+        ctx.fillText(`TOTAL DAMAGE DIBERIKAN: ${totalDmg.toLocaleString('id-ID')}`, p.cx, v.blockBottom - 8);
         return;
     }
 
@@ -766,14 +796,13 @@ function renderPauseOverlay() {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#38bdf8';
         ctx.font = 'bold 20px monospace';
-        ctx.fillText('ARSENAL AKTIF', p.cx, 48);
+        ctx.fillText('ARSENAL AKTIF', p.cx, p.titleY);
 
         drawStyledButton(p.subCloseBtn, 'X', '', '#0f172a', '#475569', '#f87171');
 
-        const pad = 24;
         const cols = 3;
         const gap = 12;
-        const cardW = (canvas.width - pad * 2 - gap * 2) / 3;
+        const cardW = (v.safeW - gap * 2) / 3;
         const cardH = 115;
 
         const owned = [];
@@ -791,8 +820,8 @@ function renderPauseOverlay() {
         owned.forEach((item, idx) => {
             const col = idx % cols;
             const row = Math.floor(idx / cols);
-            const cx = pad + col * (cardW + gap);
-            const cy = 96 + row * (cardH + gap);
+            const cx = v.safeLeft + col * (cardW + gap);
+            const cy = p.titleY + 48 + row * (cardH + gap);
 
             ctx.fillStyle = '#0f172a';
             ctx.fillRect(cx, cy, cardW, cardH);
@@ -818,16 +847,17 @@ function renderPauseOverlay() {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#facc15';
         ctx.font = 'bold 20px monospace';
-        ctx.fillText('ARTEFAK TERPASANG', p.cx, 48);
+        ctx.fillText('ARTEFAK TERPASANG', p.cx, p.titleY);
 
         drawStyledButton(p.subCloseBtn, 'X', '', '#0f172a', '#475569', '#f87171');
 
         ctx.fillStyle = '#475569';
         ctx.font = 'bold 13px monospace';
-        ctx.fillText('[ BELUM ADA ARTEFAK YANG DIMILIKI ]', p.cx, canvas.height * 0.46);
+        ctx.fillText('[ BELUM ADA ARTEFAK YANG DIMILIKI ]', p.cx, v.blockTop + Math.floor(v.blockH * 0.45));
         return;
     }
 
+    // Tombol Chart di pojok kanan atas safe area
     ctx.save();
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(p.chartBtn.x, p.chartBtn.y, p.chartBtn.w, p.chartBtn.h);
@@ -842,18 +872,18 @@ function renderPauseOverlay() {
 
     ctx.textAlign = 'center';
     ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 28px monospace';
-    ctx.fillText('SYSTEM PAUSED', p.cx, 76);
+    ctx.font = 'bold 26px monospace';
+    ctx.fillText('SYSTEM PAUSED', p.cx, p.titleY);
 
     ctx.fillStyle = '#facc15';
     ctx.font = 'bold 12.5px monospace';
-    ctx.fillText(`Current Level : ${GAME_STATE.playerLevel}`, p.cx, 114);
+    ctx.fillText(`Current Level : ${GAME_STATE.playerLevel}`, p.cx, p.titleY + 38);
 
     ctx.fillStyle = '#38bdf8';
-    ctx.fillText(`Time Survived : ${formatPlayTime(GAME_STATE.playTimeFrames)}`, p.cx, 136);
+    ctx.fillText(`Time Survived : ${formatPlayTime(GAME_STATE.playTimeFrames)}`, p.cx, p.titleY + 60);
 
     ctx.fillStyle = '#fb7185';
-    ctx.fillText(`Enemies Killed : ${GAME_STATE.enemiesKilled}  (Wave ${GAME_STATE.wave})`, p.cx, 158);
+    ctx.fillText(`Enemies Killed : ${GAME_STATE.enemiesKilled}  (Wave ${GAME_STATE.wave})`, p.cx, p.titleY + 82);
 
     const leftStats = [
         { label: 'Hull HP', val: `${player.hp} / ${GAME_CONFIG.player.maxHp}`, color: '#4ade80' },
@@ -873,9 +903,9 @@ function renderPauseOverlay() {
         { label: 'Bosses Slain', val: `${GAME_STATE.bossesKilled}`, color: '#f43f5e' }
     ];
 
-    let statY = 212;
-    const col1L = 26, col1R = p.cx - 14;
-    const col2L = p.cx + 14, col2R = canvas.width - 26;
+    let statY = p.titleY + 134;
+    const col1L = v.safeLeft, col1R = p.cx - 12;
+    const col2L = p.cx + 12, col2R = v.safeRight;
 
     for (let i = 0; i < leftStats.length; i++) {
         ctx.font = '11px monospace';
